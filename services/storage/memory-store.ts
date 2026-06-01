@@ -1,5 +1,6 @@
 /** 개발용 메모리 기반 수집 결과 저장소입니다. */
 
+import { pickFullestMetricSnapshot } from "@/lib/monitoring/metric-details";
 import { buildResourceSummary } from "@/lib/monitoring/resource-summary";
 import type { CollectorRunResult } from "@/services/collector/types";
 import { normalizeCollectorRun } from "@/services/storage/normalize";
@@ -115,7 +116,9 @@ export const listMetricHistoryFromMemory = async (params: {
     return true;
   });
 
-  return filtered.slice(-limit).reverse();
+  return [...filtered]
+    .sort((left, right) => left.metricTime.localeCompare(right.metricTime))
+    .slice(-limit);
 };
 
 export const listSessionSnapshotsFromMemory = async (
@@ -214,20 +217,13 @@ export const getMonitoringSummaryFromMemory = async (
   dbInstanceId: DbInstanceId,
 ): Promise<MonitoringSummary> => {
   const latestRun = (await listCollectionRunsFromMemory(dbInstanceId))[0] ?? null;
-  const latestMetricTime = getState()
-    .metricHistory.filter((metric) => metric.dbInstanceId === dbInstanceId)
-    .at(-1)?.metricTime;
+  const recentMetrics = getState().metricHistory.filter(
+    (metric) => metric.dbInstanceId === dbInstanceId,
+  );
+  const latestMetrics = pickFullestMetricSnapshot(recentMetrics.slice(-500));
   const latestSessionTime = getState()
     .sessionSnapshots.filter((session) => session.dbInstanceId === dbInstanceId)
     .at(-1)?.snapshotTime;
-
-  const latestMetrics = latestMetricTime
-    ? getState().metricHistory.filter(
-        (metric) =>
-          metric.dbInstanceId === dbInstanceId &&
-          metric.metricTime === latestMetricTime,
-      )
-    : [];
 
   return {
     dbInstanceId,

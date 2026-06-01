@@ -46,6 +46,35 @@ const latestSnapshot = (metrics: MetricHistoryRecord[]) => {
   return metrics.filter((metric) => metric.metricTime === latestTime);
 };
 
+/**
+ * 동일 수집 시각별로 묶어 지표 수가 가장 많은 스냅샷을 선택합니다.
+ */
+export const pickFullestMetricSnapshot = (
+  metrics: MetricHistoryRecord[],
+): MetricHistoryRecord[] => {
+  if (metrics.length === 0) {
+    return [];
+  }
+
+  const groups = new Map<string, MetricHistoryRecord[]>();
+
+  for (const metric of metrics) {
+    const bucket = groups.get(metric.metricTime) ?? [];
+    bucket.push(metric);
+    groups.set(metric.metricTime, bucket);
+  }
+
+  let fullest: MetricHistoryRecord[] = [];
+
+  for (const group of groups.values()) {
+    if (group.length > fullest.length) {
+      fullest = group;
+    }
+  }
+
+  return fullest.length > 0 ? fullest : latestSnapshot(metrics);
+};
+
 const getTaggedMetric = (
   metrics: MetricHistoryRecord[],
   metricName: string,

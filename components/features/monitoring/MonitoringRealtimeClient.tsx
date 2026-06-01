@@ -381,6 +381,16 @@ const DashboardResourceView = ({
               key={item.instance.id}
               instance={item.instance}
               resourceSummary={item.summary.resourceSummary}
+              latestMetrics={item.summary.latestMetrics.map((metric) => ({
+                id: metric.id,
+                tenantId: item.instance.tenantId,
+                dbInstanceId: item.instance.id,
+                metricTime: metric.metricTime,
+                metricName: metric.metricName,
+                metricValue: metric.metricValue,
+                unit: metric.unit,
+                tags: metric.tags ?? {},
+              }))}
               collectStatus={item.summary.lastRun?.status ?? null}
             />
           ))}
@@ -423,7 +433,11 @@ const RealtimeResourceView = ({
       resource={item.summary.resourceSummary}
     />
     <ThroughputSessionCards resource={item.summary.resourceSummary} />
-    <ResourceTrendChart dbInstanceId={item.instance.id} />
+    <ResourceTrendChart
+      key={item.instance.id}
+      dbInstanceId={item.instance.id}
+      title={`${item.instance.instanceName} · 최근 30포인트`}
+    />
     <Card>
       <CardHeader>
         <CardTitle>DB 용량 · 테이블 크기</CardTitle>

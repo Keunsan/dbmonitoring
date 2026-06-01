@@ -6,6 +6,16 @@ import { useMemo, useState } from "react";
 
 import { PageHeader } from "@/components/layout";
 import { EmptyState, ErrorState, LoadingSkeleton, StatusBadge } from "@/components/shared";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +29,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -275,6 +286,23 @@ export const DbInstanceManagementClient = ({
     defaultConnectionSecretForm,
   );
   const [savingSecretId, setSavingSecretId] = useState<string | null>(null);
+  const [deleteConfirmInstance, setDeleteConfirmInstance] = useState<DbInstance | null>(
+    null,
+  );
+  const [deletingDbInstanceId, setDeletingDbInstanceId] = useState<string | null>(null);
+  const [registerConfirmOpen, setRegisterConfirmOpen] = useState(false);
+  const [isRegisteringDbInstance, setIsRegisteringDbInstance] = useState(false);
+  const [businessRegisterConfirmOpen, setBusinessRegisterConfirmOpen] = useState(false);
+  const [isRegisteringBusinessSystem, setIsRegisteringBusinessSystem] = useState(false);
+  const [businessUpdateConfirmOpen, setBusinessUpdateConfirmOpen] = useState(false);
+  const [isUpdatingBusinessSystem, setIsUpdatingBusinessSystem] = useState(false);
+  const [deleteConfirmBusinessSystem, setDeleteConfirmBusinessSystem] =
+    useState<BusinessSystem | null>(null);
+  const [deletingBusinessSystemId, setDeletingBusinessSystemId] = useState<string | null>(
+    null,
+  );
+  const [dbEditConfirmOpen, setDbEditConfirmOpen] = useState(false);
+  const [isUpdatingDbInstance, setIsUpdatingDbInstance] = useState(false);
 
   const businessSystemOptions = useMemo(
     () =>
@@ -335,6 +363,82 @@ export const DbInstanceManagementClient = ({
   const canSubmitDbInstance =
     canTestDbInstance && hasSuccessfulCurrentRegistrationTest;
 
+  const registerConfirmSummary = useMemo(() => {
+    const businessSystem = businessSystems.find(
+      (system) => system.id === dbForm.businessSystemId,
+    );
+
+    return {
+      instanceName: dbForm.instanceName.trim(),
+      dbmsType: dbForm.dbmsType,
+      host: dbForm.host.trim(),
+      port: dbForm.port,
+      databaseName: dbForm.databaseName.trim() || "-",
+      businessSystemName: businessSystem?.name ?? "미지정",
+    };
+  }, [businessSystems, dbForm]);
+
+  const canSubmitBusinessSystem = Boolean(
+    businessForm.code.trim() && businessForm.name.trim(),
+  );
+
+  const businessRegisterConfirmSummary = useMemo(
+    () => ({
+      code: businessForm.code.trim(),
+      name: businessForm.name.trim(),
+      importance: businessForm.importance,
+      ownerDept: businessForm.ownerDept.trim() || "-",
+      ownerName: businessForm.ownerName.trim() || "-",
+      ownerEmail: businessForm.ownerEmail.trim() || "-",
+    }),
+    [businessForm],
+  );
+
+  const businessEditConfirmSummary = useMemo(
+    () => ({
+      code: businessEditForm.code.trim(),
+      name: businessEditForm.name.trim(),
+      importance: businessEditForm.importance,
+      ownerDept: businessEditForm.ownerDept.trim() || "-",
+      ownerName: businessEditForm.ownerName.trim() || "-",
+      ownerEmail: businessEditForm.ownerEmail.trim() || "-",
+    }),
+    [businessEditForm],
+  );
+
+  const dbEditConfirmSummary = useMemo(() => {
+    const businessSystem = businessSystems.find(
+      (system) => system.id === dbEditForm.businessSystemId,
+    );
+
+    return {
+      instanceName: dbEditForm.instanceName.trim(),
+      dbmsType: dbEditForm.dbmsType,
+      host: dbEditForm.host.trim(),
+      port: dbEditForm.port,
+      databaseName: dbEditForm.databaseName.trim() || "-",
+      businessSystemName: businessSystem?.name ?? "미지정",
+    };
+  }, [businessSystems, dbEditForm]);
+
+  const canSubmitDbInstanceEdit = Boolean(
+    dbEditForm.businessSystemId &&
+      dbEditForm.instanceName.trim() &&
+      dbEditForm.host.trim() &&
+      dbEditForm.port.trim(),
+  );
+
+  const isRegistrationBusy =
+    isRegisteringDbInstance || registrationTest.status === "testing";
+
+  /** API 오류를 사용자에게 보여줄 문구로 변환합니다. */
+  const resolveUserFacingErrorMessage = (actionError: unknown, fallback: string) => {
+    if (actionError instanceof Error && actionError.message.trim()) {
+      return actionError.message;
+    }
+    return fallback;
+  };
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
@@ -362,8 +466,31 @@ export const DbInstanceManagementClient = ({
     }
   };
 
-  const submitBusinessSystem = async (event: React.FormEvent<HTMLFormElement>) => {
+  /** 업무 시스템 등록 확인 다이얼로그를 엽니다. */
+  const requestRegisterBusinessSystem = () => {
+    setMessage(null);
+    setError(null);
+
+    if (!canSubmitBusinessSystem) {
+      setError("업무 코드와 업무명을 입력해주세요.");
+      return;
+    }
+
+    setBusinessRegisterConfirmOpen(true);
+  };
+
+  const handleBusinessRegisterFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    requestRegisterBusinessSystem();
+  };
+
+  /** 확인 후 업무 시스템을 등록합니다. */
+  const confirmRegisterBusinessSystem = async () => {
+    if (!canSubmitBusinessSystem || isRegisteringBusinessSystem) {
+      return;
+    }
+
+    setIsRegisteringBusinessSystem(true);
     setMessage(null);
     setError(null);
 
@@ -372,15 +499,21 @@ export const DbInstanceManagementClient = ({
         method: "POST",
         body: JSON.stringify(businessForm),
       });
+      setBusinessRegisterConfirmOpen(false);
       setBusinessForm(defaultBusinessSystemForm);
-      setMessage("업무 시스템을 등록했습니다.");
+      setMessage(
+        `"${businessRegisterConfirmSummary.name}" 업무 시스템을 등록했습니다.`,
+      );
       await refresh();
     } catch (submitError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "업무 시스템 등록에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          submitError,
+          "업무 시스템을 등록하지 못했습니다. 입력값을 확인한 뒤 다시 시도해주세요.",
+        ),
       );
+    } finally {
+      setIsRegisteringBusinessSystem(false);
     }
   };
 
@@ -391,7 +524,7 @@ export const DbInstanceManagementClient = ({
     setError(null);
   };
 
-  const submitBusinessSystemEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleBusinessEditFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!editingBusinessSystemId) {
@@ -401,47 +534,80 @@ export const DbInstanceManagementClient = ({
     setMessage(null);
     setError(null);
 
+    if (!businessEditForm.name.trim()) {
+      setError("업무명을 입력해주세요.");
+      return;
+    }
+
+    setBusinessUpdateConfirmOpen(true);
+  };
+
+  /** 확인 후 업무 시스템 정보를 수정합니다. */
+  const confirmUpdateBusinessSystem = async () => {
+    if (!editingBusinessSystemId || isUpdatingBusinessSystem) {
+      return;
+    }
+
+    setIsUpdatingBusinessSystem(true);
+    setMessage(null);
+    setError(null);
+
     try {
       await requestJson<BusinessSystem>(`/api/business-systems/${editingBusinessSystemId}`, {
         method: "PATCH",
         body: JSON.stringify(businessEditForm),
       });
+      setBusinessUpdateConfirmOpen(false);
       setEditingBusinessSystemId(null);
       setBusinessEditForm(defaultBusinessSystemForm);
-      setMessage("업무 시스템 정보를 수정했습니다.");
+      setMessage(`"${businessEditConfirmSummary.name}" 업무 시스템 정보를 수정했습니다.`);
       await refresh();
     } catch (updateError) {
       setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "업무 시스템 수정에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          updateError,
+          "업무 시스템 정보를 수정하지 못했습니다. 입력값을 확인한 뒤 다시 시도해주세요.",
+        ),
       );
+    } finally {
+      setIsUpdatingBusinessSystem(false);
     }
   };
 
-  const deleteBusinessSystemById = async (id: string) => {
+  /** 확인 다이얼로그에서 업무 시스템 삭제를 실행합니다. */
+  const confirmDeleteBusinessSystem = async () => {
+    if (!deleteConfirmBusinessSystem || deletingBusinessSystemId) {
+      return;
+    }
+
+    const target = deleteConfirmBusinessSystem;
+    setDeletingBusinessSystemId(target.id);
     setMessage(null);
     setError(null);
 
     try {
-      await requestJson(`/api/business-systems/${id}`, { method: "DELETE" });
-      if (editingBusinessSystemId === id) {
+      await requestJson(`/api/business-systems/${target.id}`, { method: "DELETE" });
+      if (editingBusinessSystemId === target.id) {
         setEditingBusinessSystemId(null);
         setBusinessEditForm(defaultBusinessSystemForm);
       }
-      setMessage("업무 시스템을 삭제했습니다.");
+      setDeleteConfirmBusinessSystem(null);
+      setMessage(`"${target.name}" 업무 시스템을 삭제했습니다.`);
       await refresh();
     } catch (deleteError) {
       setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "업무 시스템 삭제에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          deleteError,
+          "업무 시스템을 삭제하지 못했습니다. 연결된 DB 인스턴스가 있는지 확인해주세요.",
+        ),
       );
+    } finally {
+      setDeletingBusinessSystemId(null);
     }
   };
 
-  const submitDbInstance = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  /** 등록 확인 다이얼로그를 엽니다. */
+  const requestRegisterDbInstance = () => {
     setMessage(null);
     setError(null);
 
@@ -449,6 +615,19 @@ export const DbInstanceManagementClient = ({
       setError("DB 연결 테스트에 성공한 후 DB 인스턴스를 등록할 수 있습니다.");
       return;
     }
+
+    setRegisterConfirmOpen(true);
+  };
+
+  /** 확인 후 DB 인스턴스 등록과 Secret 저장을 수행합니다. */
+  const confirmRegisterDbInstance = async () => {
+    if (!canSubmitDbInstance || isRegisteringDbInstance) {
+      return;
+    }
+
+    setIsRegisteringDbInstance(true);
+    setMessage(null);
+    setError(null);
 
     try {
       const instance = await requestJson<DbInstance>("/api/db-instances", {
@@ -463,21 +642,30 @@ export const DbInstanceManagementClient = ({
         body: JSON.stringify(registrationCredentialPayload),
       });
 
+      setRegisterConfirmOpen(false);
       setDbForm((current) => ({
         ...defaultDbInstanceForm,
         businessSystemId: current.businessSystemId,
       }));
       setRegistrationSecretForm(defaultConnectionSecretForm);
       setRegistrationTest(defaultRegistrationTestState);
-      setMessage("DB 인스턴스를 등록했습니다.");
+      setMessage(`"${registerConfirmSummary.instanceName}" DB 인스턴스를 등록했습니다.`);
       await refresh();
     } catch (submitError) {
       setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "DB 인스턴스 등록에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          submitError,
+          "DB 인스턴스를 등록하지 못했습니다. 입력값을 확인한 뒤 다시 시도해주세요.",
+        ),
       );
+    } finally {
+      setIsRegisteringDbInstance(false);
     }
+  };
+
+  const handleRegisterFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    requestRegisterDbInstance();
   };
 
   const testRegistrationConnection = async () => {
@@ -508,10 +696,10 @@ export const DbInstanceManagementClient = ({
       });
       setMessage("등록 전 DB 연결 테스트에 성공했습니다.");
     } catch (testError) {
-      const testMessage =
-        testError instanceof Error
-          ? testError.message
-          : "등록 전 DB 연결 테스트에 실패했습니다.";
+      const testMessage = resolveUserFacingErrorMessage(
+        testError,
+        "등록 전 DB 연결 테스트에 실패했습니다. Host·Port·계정 정보를 확인해주세요.",
+      );
 
       setRegistrationTest({
         status: "fail",
@@ -529,7 +717,7 @@ export const DbInstanceManagementClient = ({
     setError(null);
   };
 
-  const submitDbInstanceEdit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleDbInstanceEditFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!editingDbInstanceId) {
@@ -539,42 +727,79 @@ export const DbInstanceManagementClient = ({
     setMessage(null);
     setError(null);
 
+    if (!canSubmitDbInstanceEdit) {
+      setError("업무 시스템, 인스턴스명, Host, Port를 입력해주세요.");
+      return;
+    }
+
+    setDbEditConfirmOpen(true);
+  };
+
+  /** 확인 후 DB 인스턴스 정보를 수정합니다. */
+  const confirmUpdateDbInstance = async () => {
+    if (!editingDbInstanceId || !canSubmitDbInstanceEdit || isUpdatingDbInstance) {
+      return;
+    }
+
+    setIsUpdatingDbInstance(true);
+    setMessage(null);
+    setError(null);
+
     try {
       await requestJson<DbInstance>(`/api/db-instances/${editingDbInstanceId}`, {
         method: "PATCH",
         body: JSON.stringify(toDbInstancePayload(dbEditForm)),
       });
+      setDbEditConfirmOpen(false);
       setEditingDbInstanceId(null);
       setDbEditForm(defaultDbInstanceForm);
-      setMessage("DB 인스턴스 정보를 수정했습니다.");
+      setMessage(`"${dbEditConfirmSummary.instanceName}" DB 인스턴스 정보를 수정했습니다.`);
       await refresh();
     } catch (updateError) {
       setError(
-        updateError instanceof Error
-          ? updateError.message
-          : "DB 인스턴스 수정에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          updateError,
+          "DB 인스턴스 정보를 수정하지 못했습니다. 입력값을 확인한 뒤 다시 시도해주세요.",
+        ),
       );
+    } finally {
+      setIsUpdatingDbInstance(false);
     }
   };
 
-  const deleteDbInstanceById = async (id: string) => {
+  /** 확인 다이얼로그에서 삭제를 실행합니다. */
+  const confirmDeleteDbInstance = async () => {
+    if (!deleteConfirmInstance || deletingDbInstanceId) {
+      return;
+    }
+
+    const target = deleteConfirmInstance;
+    setDeletingDbInstanceId(target.id);
     setMessage(null);
     setError(null);
 
     try {
-      await requestJson(`/api/db-instances/${id}`, { method: "DELETE" });
-      if (editingDbInstanceId === id) {
+      await requestJson(`/api/db-instances/${target.id}`, { method: "DELETE" });
+      if (editingDbInstanceId === target.id) {
         setEditingDbInstanceId(null);
         setDbEditForm(defaultDbInstanceForm);
       }
-      setMessage("DB 인스턴스를 삭제했습니다.");
+      if (secretTargetId === target.id) {
+        setSecretTargetId(null);
+        setSecretForm(defaultConnectionSecretForm);
+      }
+      setDeleteConfirmInstance(null);
+      setMessage(`"${target.instanceName}" DB 인스턴스를 삭제했습니다.`);
       await refresh();
     } catch (deleteError) {
       setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "DB 인스턴스 삭제에 실패했습니다.",
+        resolveUserFacingErrorMessage(
+          deleteError,
+          "DB 인스턴스를 삭제하지 못했습니다. 잠시 후 다시 시도해주세요.",
+        ),
       );
+    } finally {
+      setDeletingDbInstanceId(null);
     }
   };
 
@@ -719,7 +944,11 @@ export const DbInstanceManagementClient = ({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="grid gap-3 md:grid-cols-2" onSubmit={submitBusinessSystem}>
+              <form
+                className="grid gap-3 md:grid-cols-2"
+                onSubmit={handleBusinessRegisterFormSubmit}
+              >
+                <fieldset disabled={isRegisteringBusinessSystem} className="contents">
                 <div className="space-y-1.5">
                   <Label htmlFor="business-code">업무 코드</Label>
                   <Input
@@ -803,8 +1032,18 @@ export const DbInstanceManagementClient = ({
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <Button type="submit">업무 시스템 등록</Button>
+                  <Button type="submit" disabled={!canSubmitBusinessSystem || isRegisteringBusinessSystem}>
+                    {isRegisteringBusinessSystem ? (
+                      <>
+                        <Spinner className="size-4" />
+                        등록 중…
+                      </>
+                    ) : (
+                      "업무 시스템 등록"
+                    )}
+                  </Button>
                 </div>
+                </fieldset>
               </form>
             </CardContent>
           </Card>
@@ -816,7 +1055,8 @@ export const DbInstanceManagementClient = ({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form className="grid gap-3 md:grid-cols-2" onSubmit={submitDbInstance}>
+              <form className="grid gap-3 md:grid-cols-2" onSubmit={handleRegisterFormSubmit}>
+                <fieldset disabled={isRegisteringDbInstance} className="contents">
                 <SelectField
                   id="db-business-system"
                   label="업무 시스템"
@@ -1060,20 +1300,39 @@ export const DbInstanceManagementClient = ({
                       {registrationTest.message}
                     </p>
                   ) : null}
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
                       variant="outline"
-                      disabled={!canTestDbInstance || registrationTest.status === "testing"}
+                      disabled={!canTestDbInstance || isRegistrationBusy}
                       onClick={() => void testRegistrationConnection()}
                     >
-                      {registrationTest.status === "testing" ? "확인 중" : "연결 테스트"}
+                      {registrationTest.status === "testing" ? (
+                        <>
+                          <Spinner className="size-3" />
+                          확인 중…
+                        </>
+                      ) : (
+                        "연결 테스트"
+                      )}
                     </Button>
-                    <Button type="submit" disabled={!canSubmitDbInstance}>
-                      DB 인스턴스 등록
+                    <Button
+                      type="button"
+                      disabled={!canSubmitDbInstance || isRegistrationBusy}
+                      onClick={requestRegisterDbInstance}
+                    >
+                      {isRegisteringDbInstance ? (
+                        <>
+                          <Spinner className="size-3" />
+                          등록 중…
+                        </>
+                      ) : (
+                        "DB 인스턴스 등록"
+                      )}
                     </Button>
                   </div>
                 </div>
+                </fieldset>
               </form>
             </CardContent>
           </Card>
@@ -1089,8 +1348,9 @@ export const DbInstanceManagementClient = ({
             {editingBusinessSystemId ? (
               <form
                 className="mb-4 grid gap-3 rounded-lg border p-4 md:grid-cols-2"
-                onSubmit={submitBusinessSystemEdit}
+                onSubmit={handleBusinessEditFormSubmit}
               >
+                <fieldset disabled={isUpdatingBusinessSystem} className="contents">
                 <div className="space-y-1.5">
                   <Label htmlFor="business-edit-code">업무 코드</Label>
                   <Input id="business-edit-code" value={businessEditForm.code} disabled />
@@ -1163,10 +1423,20 @@ export const DbInstanceManagementClient = ({
                   />
                 </div>
                 <div className="flex gap-2 md:col-span-2">
-                  <Button type="submit">수정 저장</Button>
+                  <Button type="submit" disabled={isUpdatingBusinessSystem}>
+                    {isUpdatingBusinessSystem ? (
+                      <>
+                        <Spinner className="size-4" />
+                        저장 중…
+                      </>
+                    ) : (
+                      "수정 저장"
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isUpdatingBusinessSystem}
                     onClick={() => {
                       setEditingBusinessSystemId(null);
                       setBusinessEditForm(defaultBusinessSystemForm);
@@ -1175,6 +1445,7 @@ export const DbInstanceManagementClient = ({
                     취소
                   </Button>
                 </div>
+                </fieldset>
               </form>
             ) : null}
             {businessSystems.length === 0 ? (
@@ -1215,9 +1486,17 @@ export const DbInstanceManagementClient = ({
                           type="button"
                           size="sm"
                           variant="destructive"
-                          onClick={() => void deleteBusinessSystemById(system.id)}
+                          onClick={() => setDeleteConfirmBusinessSystem(system)}
+                          disabled={deletingBusinessSystemId === system.id}
                         >
-                          삭제
+                          {deletingBusinessSystemId === system.id ? (
+                            <>
+                              <Spinner className="size-3" />
+                              삭제 중
+                            </>
+                          ) : (
+                            "삭제"
+                          )}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -1360,8 +1639,9 @@ export const DbInstanceManagementClient = ({
             {editingDbInstanceId ? (
               <form
                 className="mb-4 grid gap-3 rounded-lg border p-4 md:grid-cols-2"
-                onSubmit={submitDbInstanceEdit}
+                onSubmit={handleDbInstanceEditFormSubmit}
               >
+                <fieldset disabled={isUpdatingDbInstance} className="contents">
                 <SelectField
                   id="db-edit-business-system"
                   label="업무 시스템"
@@ -1515,10 +1795,20 @@ export const DbInstanceManagementClient = ({
                   />
                 </div>
                 <div className="flex gap-2 md:col-span-2">
-                  <Button type="submit">수정 저장</Button>
+                  <Button type="submit" disabled={!canSubmitDbInstanceEdit || isUpdatingDbInstance}>
+                    {isUpdatingDbInstance ? (
+                      <>
+                        <Spinner className="size-4" />
+                        저장 중…
+                      </>
+                    ) : (
+                      "수정 저장"
+                    )}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={isUpdatingDbInstance}
                     onClick={() => {
                       setEditingDbInstanceId(null);
                       setDbEditForm(defaultDbInstanceForm);
@@ -1527,6 +1817,7 @@ export const DbInstanceManagementClient = ({
                     취소
                   </Button>
                 </div>
+                </fieldset>
               </form>
             ) : null}
             {loading ? (
@@ -1622,9 +1913,17 @@ export const DbInstanceManagementClient = ({
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => void deleteDbInstanceById(instance.id)}
+                            onClick={() => setDeleteConfirmInstance(instance)}
+                            disabled={deletingDbInstanceId === instance.id}
                           >
-                            삭제
+                            {deletingDbInstanceId === instance.id ? (
+                              <>
+                                <Spinner className="size-3" />
+                                삭제 중
+                              </>
+                            ) : (
+                              "삭제"
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -1636,6 +1935,296 @@ export const DbInstanceManagementClient = ({
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={businessRegisterConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isRegisteringBusinessSystem) {
+            setBusinessRegisterConfirmOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>업무 시스템을 등록할까요?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left text-sm text-muted-foreground">
+                <p>아래 정보로 업무 시스템을 등록합니다.</p>
+                <ul className="space-y-1 rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-xs text-foreground">
+                  <li>업무 코드: {businessRegisterConfirmSummary.code}</li>
+                  <li>업무명: {businessRegisterConfirmSummary.name}</li>
+                  <li>중요도: {businessRegisterConfirmSummary.importance}</li>
+                  <li>담당 부서: {businessRegisterConfirmSummary.ownerDept}</li>
+                  <li>
+                    담당자: {businessRegisterConfirmSummary.ownerName} /{" "}
+                    {businessRegisterConfirmSummary.ownerEmail}
+                  </li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRegisteringBusinessSystem}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isRegisteringBusinessSystem}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmRegisterBusinessSystem();
+              }}
+            >
+              {isRegisteringBusinessSystem ? (
+                <>
+                  <Spinner className="size-4" />
+                  등록 중…
+                </>
+              ) : (
+                "등록"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={businessUpdateConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isUpdatingBusinessSystem) {
+            setBusinessUpdateConfirmOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>업무 시스템 정보를 수정할까요?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left text-sm text-muted-foreground">
+                <p>아래 내용으로 업무 시스템 정보를 저장합니다.</p>
+                <ul className="space-y-1 rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-xs text-foreground">
+                  <li>업무 코드: {businessEditConfirmSummary.code}</li>
+                  <li>업무명: {businessEditConfirmSummary.name}</li>
+                  <li>중요도: {businessEditConfirmSummary.importance}</li>
+                  <li>담당 부서: {businessEditConfirmSummary.ownerDept}</li>
+                  <li>
+                    담당자: {businessEditConfirmSummary.ownerName} /{" "}
+                    {businessEditConfirmSummary.ownerEmail}
+                  </li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdatingBusinessSystem}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUpdatingBusinessSystem}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmUpdateBusinessSystem();
+              }}
+            >
+              {isUpdatingBusinessSystem ? (
+                <>
+                  <Spinner className="size-4" />
+                  저장 중…
+                </>
+              ) : (
+                "수정"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteConfirmBusinessSystem !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingBusinessSystemId) {
+            setDeleteConfirmBusinessSystem(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>업무 시스템을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirmBusinessSystem ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {deleteConfirmBusinessSystem.name} ({deleteConfirmBusinessSystem.code})
+                  </span>
+                  을(를) 삭제합니다. 연결된 DB 인스턴스가 있으면 삭제할 수 없으며, 이 작업은
+                  되돌릴 수 없습니다.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingBusinessSystemId !== null}>
+              취소
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deletingBusinessSystemId !== null}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteBusinessSystem();
+              }}
+            >
+              {deletingBusinessSystemId ? (
+                <>
+                  <Spinner className="size-4" />
+                  삭제 중…
+                </>
+              ) : (
+                "삭제"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={dbEditConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isUpdatingDbInstance) {
+            setDbEditConfirmOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>DB 인스턴스 정보를 수정할까요?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left text-sm text-muted-foreground">
+                <p>아래 내용으로 DB 인스턴스 설정을 저장합니다.</p>
+                <ul className="space-y-1 rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-xs text-foreground">
+                  <li>인스턴스: {dbEditConfirmSummary.instanceName}</li>
+                  <li>업무 시스템: {dbEditConfirmSummary.businessSystemName}</li>
+                  <li>
+                    DBMS: {dbEditConfirmSummary.dbmsType} / {dbEditConfirmSummary.host}:
+                    {dbEditConfirmSummary.port}
+                  </li>
+                  <li>Database: {dbEditConfirmSummary.databaseName}</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdatingDbInstance}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isUpdatingDbInstance}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmUpdateDbInstance();
+              }}
+            >
+              {isUpdatingDbInstance ? (
+                <>
+                  <Spinner className="size-4" />
+                  저장 중…
+                </>
+              ) : (
+                "수정"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={registerConfirmOpen}
+        onOpenChange={(open) => {
+          if (!open && !isRegisteringDbInstance) {
+            setRegisterConfirmOpen(false);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>DB 인스턴스를 등록할까요?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-left text-sm text-muted-foreground">
+                <p>아래 정보로 DB 인스턴스를 등록하고 접속 Secret을 Vault에 저장합니다.</p>
+                <ul className="space-y-1 rounded-md border border-border/60 bg-muted/30 p-3 font-mono text-xs text-foreground">
+                  <li>인스턴스: {registerConfirmSummary.instanceName}</li>
+                  <li>업무 시스템: {registerConfirmSummary.businessSystemName}</li>
+                  <li>
+                    DBMS: {registerConfirmSummary.dbmsType} / {registerConfirmSummary.host}:
+                    {registerConfirmSummary.port}
+                  </li>
+                  <li>Database: {registerConfirmSummary.databaseName}</li>
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isRegisteringDbInstance}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isRegisteringDbInstance}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmRegisterDbInstance();
+              }}
+            >
+              {isRegisteringDbInstance ? (
+                <>
+                  <Spinner className="size-4" />
+                  등록 중…
+                </>
+              ) : (
+                "등록"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={deleteConfirmInstance !== null}
+        onOpenChange={(open) => {
+          if (!open && !deletingDbInstanceId) {
+            setDeleteConfirmInstance(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>DB 인스턴스를 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteConfirmInstance ? (
+                <>
+                  <span className="font-medium text-foreground">
+                    {deleteConfirmInstance.instanceName}
+                  </span>
+                  을(를) 삭제하면 수집 이력·지표·세션 데이터와 접속 Secret 설정이 함께
+                  제거됩니다. 이 작업은 되돌릴 수 없습니다.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingDbInstanceId !== null}>
+              취소
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deletingDbInstanceId !== null}
+              onClick={(event) => {
+                event.preventDefault();
+                void confirmDeleteDbInstance();
+              }}
+            >
+              {deletingDbInstanceId ? (
+                <>
+                  <Spinner className="size-4" />
+                  삭제 중…
+                </>
+              ) : (
+                "삭제"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </main>
   );
 };

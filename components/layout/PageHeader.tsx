@@ -23,12 +23,12 @@ export const PageHeader = ({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 border-b bg-background px-4 py-3 lg:flex-row lg:items-center lg:justify-between",
+        "flex flex-col gap-2 border-b border-border/60 bg-background/40 px-4 py-3 backdrop-blur-sm lg:flex-row lg:items-center lg:justify-between",
         className,
       )}
     >
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="font-mono text-xl font-semibold tracking-tight">{title}</h1>
         {description ? (
           <p className="text-muted-foreground mt-1 text-sm">{description}</p>
         ) : null}

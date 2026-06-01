@@ -63,6 +63,7 @@ export const ResourceTrendChart = ({
 }: ResourceTrendChartProps) => {
   const [seriesMap, setSeriesMap] = useState<Record<string, MetricHistoryItem[]>>({});
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,15 +84,23 @@ export const ResourceTrendChart = ({
         }
       } catch (loadError) {
         if (!cancelled) {
+          setSeriesMap({});
           setError(
             loadError instanceof Error
               ? loadError.message
               : "추이 데이터를 불러오지 못했습니다.",
           );
         }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     };
 
+    setLoading(true);
+    setSeriesMap({});
+    setError(null);
     void load();
     const intervalId = window.setInterval(() => void load(), 10_000);
 
@@ -105,9 +114,8 @@ export const ResourceTrendChart = ({
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {trendMetrics.map((metric) => {
         const items = seriesMap[metric.key] ?? [];
-        const chartData = items
-          .slice()
-          .reverse()
+        const chartData = [...items]
+          .sort((left, right) => left.metricTime.localeCompare(right.metricTime))
           .map((item) => ({
             time: new Date(item.metricTime).toLocaleTimeString("ko-KR", {
               hour: "2-digit",
@@ -117,8 +125,10 @@ export const ResourceTrendChart = ({
             value: item.metricValue,
           }));
 
+        const chartKey = `${dbInstanceId}-${metric.key}-${chartData.length}-${chartData.at(-1)?.value ?? "empty"}`;
+
         return (
-          <Card key={metric.key}>
+          <Card key={`${dbInstanceId}-${metric.key}`}>
             <CardHeader className="pb-1.5">
               <CardTitle className="text-base">{metric.label}</CardTitle>
               <CardDescription>{title}</CardDescription>
@@ -126,11 +136,17 @@ export const ResourceTrendChart = ({
             <CardContent>
               {error ? (
                 <p className="text-destructive text-sm">{error}</p>
+              ) : loading ? (
+                <p className="text-muted-foreground text-sm">추이 데이터를 불러오는 중입니다.</p>
               ) : chartData.length === 0 ? (
                 <p className="text-muted-foreground text-sm">추이 데이터가 없습니다.</p>
               ) : (
                 <ChartContainer config={chartConfig} className="h-[160px] w-full">
-                  <LineChart data={chartData} margin={{ left: 8, right: 8, top: 8 }}>
+                  <LineChart
+                    key={chartKey}
+                    data={chartData}
+                    margin={{ left: 8, right: 8, top: 8 }}
+                  >
                     <CartesianGrid vertical={false} />
                     <XAxis dataKey="time" tickLine={false} axisLine={false} hide />
                     <YAxis tickLine={false} axisLine={false} width={40} />

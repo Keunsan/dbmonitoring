@@ -265,6 +265,19 @@ export const metricTooltipContent: Record<string, MetricTooltipContent> = {
     interpretation:
       "문제 SQL을 식별하는 단서입니다. 파라미터, 실행 계획, wait와 함께 확인합니다.",
   },
+  "summary.db.total_size_gb": {
+    definition: "데이터베이스 MDF·LDF 파일 할당 크기의 합계입니다.",
+    formula: "sys.database_files 기준 ROWS·LOG 타입 파일 size 합계를 GB로 환산합니다.",
+    interpretation:
+      "DB 전체 디스크 점유 규모를 파악할 때 사용합니다. 사용률과 함께 용량 증설 계획을 검토합니다.",
+  },
+  "summary.session.user_active_total": {
+    definition: "시스템 계정 세션을 제외한 사용자 세션의 활성·전체 수입니다.",
+    formula:
+      "is_user_process = 1, session_id > 50 조건의 running 세션 수 / 전체 세션 수입니다.",
+    interpretation:
+      "동시 접속 부하를 볼 때 사용합니다. 활성 세션이 전체 대비 급증하면 장시간 실행 SQL을 확인합니다.",
+  },
 };
 
 export const getMetricTooltipContent = (

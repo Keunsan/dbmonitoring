@@ -1,6 +1,14 @@
 /** Supabase 기반 업무 시스템·DB 인스턴스 메타데이터 저장소입니다. */
 
 import { ApiRouteError, badRequest, notFound } from "@/lib/api";
+import {
+  toBusinessSystemCreateError,
+  toBusinessSystemDeleteError,
+  toBusinessSystemUpdateError,
+  toDbInstanceCreateError,
+  toDbInstanceDeleteError,
+  toDbInstanceUpdateError,
+} from "@/lib/inventory/purge-db-instance-data";
 import { getSupabaseServerClient } from "@/lib/db/supabase-server";
 import { buildVaultConnectionSecretRef } from "@/lib/secrets";
 import { DEFAULT_TENANT_ID, type CollectStatus } from "@/types/domain";
@@ -179,7 +187,7 @@ export const createBusinessSystemInSupabase = async (input: BusinessSystemInput)
     .maybeSingle();
 
   if (existingError) {
-    throw existingError;
+    throw toBusinessSystemCreateError(existingError);
   }
 
   if (existing) {
@@ -193,7 +201,7 @@ export const createBusinessSystemInSupabase = async (input: BusinessSystemInput)
     .single();
 
   if (error) {
-    throw error;
+    throw toBusinessSystemCreateError(error);
   }
 
   return toBusinessSystem(data as BusinessSystemRow);
@@ -219,7 +227,7 @@ export const updateBusinessSystemInSupabase = async (
     .maybeSingle();
 
   if (error) {
-    throw error;
+    throw toBusinessSystemUpdateError(error);
   }
 
   if (!data) {
@@ -236,7 +244,7 @@ export const deleteBusinessSystemFromSupabase = async (id: string) => {
     .eq("business_system_id", id);
 
   if (countError) {
-    throw countError;
+    throw toBusinessSystemDeleteError(countError);
   }
 
   if ((count ?? 0) > 0) {
@@ -254,7 +262,7 @@ export const deleteBusinessSystemFromSupabase = async (id: string) => {
     .eq("tenant_id", DEFAULT_TENANT_ID);
 
   if (error) {
-    throw error;
+    throw toBusinessSystemDeleteError(error);
   }
 };
 
@@ -301,7 +309,7 @@ export const createDbInstanceInSupabase = async (input: DbInstanceInput) => {
     .maybeSingle();
 
   if (systemError) {
-    throw systemError;
+    throw toDbInstanceCreateError(systemError);
   }
 
   if (!businessSystem) {
@@ -315,7 +323,7 @@ export const createDbInstanceInSupabase = async (input: DbInstanceInput) => {
     .single();
 
   if (error) {
-    throw error;
+    throw toDbInstanceCreateError(error);
   }
 
   return toDbInstance(data as DbInstanceRow);
@@ -378,7 +386,7 @@ export const updateDbInstanceInSupabase = async (id: string, input: DbInstanceIn
     .maybeSingle();
 
   if (error) {
-    throw error;
+    throw toDbInstanceUpdateError(error);
   }
 
   if (!data) {
@@ -389,14 +397,20 @@ export const updateDbInstanceInSupabase = async (id: string, input: DbInstanceIn
 };
 
 export const deleteDbInstanceFromSupabase = async (id: string) => {
-  const { error } = await getClient()
+  const { data, error } = await getClient()
     .from("db_instance")
     .delete()
     .eq("id", id)
-    .eq("tenant_id", DEFAULT_TENANT_ID);
+    .eq("tenant_id", DEFAULT_TENANT_ID)
+    .select("id")
+    .maybeSingle();
 
   if (error) {
-    throw error;
+    throw toDbInstanceDeleteError(error);
+  }
+
+  if (!data) {
+    throw notFound("DB 인스턴스를 찾을 수 없습니다.");
   }
 };
 

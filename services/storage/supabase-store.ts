@@ -2,6 +2,7 @@
 
 import { ApiRouteError } from "@/lib/api";
 import { serializeError } from "@/lib/serialize-error";
+import { pickFullestMetricSnapshot } from "@/lib/monitoring/metric-details";
 import { buildResourceSummary } from "@/lib/monitoring/resource-summary";
 import { getSupabaseServerClient, isSupabaseServerConfigured } from "@/lib/db/supabase-server";
 import type { CollectorRunResult } from "@/services/collector/types";
@@ -454,6 +455,7 @@ export const listMetricHistoryFromSupabase = async (params: {
   dbInstanceId?: DbInstanceId;
   metricName?: string;
   limit?: number;
+  metricTimeGte?: string;
 }): Promise<MetricHistoryRecord[]> => {
   const limit = params.limit ?? 200;
   let query = getClient()
@@ -468,6 +470,10 @@ export const listMetricHistoryFromSupabase = async (params: {
 
   if (params.metricName) {
     query = query.eq("metric_name", params.metricName);
+  }
+
+  if (params.metricTimeGte) {
+    query = query.gte("metric_time", params.metricTimeGte);
   }
 
   const { data, error } = await query;
@@ -648,34 +654,51 @@ export const listDeadlockEventsFromSupabase = async (
   return ((data ?? []) as DeadlockRow[]).map(toDeadlock);
 };
 
+const SUMMARY_METRIC_LIMIT = 200;
+const SUMMARY_METRIC_LOOKBACK_MS = 2 * 60 * 60 * 1_000;
+
 export const getMonitoringSummaryFromSupabase = async (
   dbInstanceId: DbInstanceId,
 ): Promise<MonitoringSummary> => {
+  // #region agent log
+  fetch("http://127.0.0.1:7400/ingest/ce507061-2dfc-43ac-a17f-b1938c31136d", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4719f6" },
+    body: JSON.stringify({
+      sessionId: "4719f6",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "supabase-store.ts:getMonitoringSummaryFromSupabase:entry",
+      message: "summary query start",
+      data: { dbInstanceId },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
+
   const latestRun = (await listCollectionRunsFromSupabase(dbInstanceId))[0] ?? null;
+  const recentMetrics = await listMetricHistoryFromSupabase({
+    dbInstanceId,
+    limit: SUMMARY_METRIC_LIMIT,
+    metricTimeGte: new Date(Date.now() - SUMMARY_METRIC_LOOKBACK_MS).toISOString(),
+  });
+  const latestMetrics = pickFullestMetricSnapshot(recentMetrics);
 
-  const { data: latestMetricRow, error: metricError } = await getClient()
-    .from("metric_history")
-    .select("metric_time")
-    .eq("db_instance_id", dbInstanceId)
-    .order("metric_time", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (metricError) {
-    throw metricError;
-  }
-
-  const latestMetricTime = latestMetricRow?.metric_time ?? null;
-
-  const latestMetrics = latestMetricTime
-    ? (
-        await getClient()
-          .from("metric_history")
-          .select("*")
-          .eq("db_instance_id", dbInstanceId)
-          .eq("metric_time", latestMetricTime)
-      ).data ?? []
-    : [];
+  // #region agent log
+  fetch("http://127.0.0.1:7400/ingest/ce507061-2dfc-43ac-a17f-b1938c31136d", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4719f6" },
+    body: JSON.stringify({
+      sessionId: "4719f6",
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "supabase-store.ts:getMonitoringSummaryFromSupabase:metrics",
+      message: "metric history loaded",
+      data: { dbInstanceId, metricCount: recentMetrics.length },
+      timestamp: Date.now(),
+    }),
+  }).catch(() => {});
+  // #endregion
 
   const { data: latestSessionRow, error: sessionError } = await getClient()
     .from("session_snapshot")
@@ -691,15 +714,21 @@ export const getMonitoringSummaryFromSupabase = async (
 
   const latestSessionTime = latestSessionRow?.snapshot_time ?? null;
 
-  const latestSessions = latestSessionTime
-    ? (
-        await getClient()
-          .from("session_snapshot")
-          .select("*")
-          .eq("db_instance_id", dbInstanceId)
-          .eq("snapshot_time", latestSessionTime)
-      ).data ?? []
-    : [];
+  let latestSessions: SessionSnapshotRow[] = [];
+
+  if (latestSessionTime) {
+    const { data: sessionRows, error: sessionsError } = await getClient()
+      .from("session_snapshot")
+      .select("*")
+      .eq("db_instance_id", dbInstanceId)
+      .eq("snapshot_time", latestSessionTime);
+
+    if (sessionsError) {
+      throw sessionsError;
+    }
+
+    latestSessions = (sessionRows ?? []) as SessionSnapshotRow[];
+  }
 
   const blockingCountQuery = getClient()
     .from("blocking_snapshot")
@@ -709,18 +738,27 @@ export const getMonitoringSummaryFromSupabase = async (
     .from("deadlock_event")
     .select("id", { count: "exact", head: true });
 
-  const [{ count: blockingCount }, { count: deadlockCount }] = await Promise.all([
+  const [blockingResult, deadlockResult] = await Promise.all([
     blockingCountQuery.eq("db_instance_id", dbInstanceId),
     deadlockCountQuery.eq("db_instance_id", dbInstanceId),
   ]);
 
+  if (blockingResult.error) {
+    throw blockingResult.error;
+  }
+
+  if (deadlockResult.error) {
+    throw deadlockResult.error;
+  }
+
+  const blockingCount = blockingResult.count;
+  const deadlockCount = deadlockResult.count;
+
   return {
     dbInstanceId,
     lastRun: latestRun,
-    latestMetrics: (latestMetrics as MetricHistoryRow[]).map(toMetricHistory),
-    resourceSummary: buildResourceSummary(
-      (latestMetrics as MetricHistoryRow[]).map(toMetricHistory),
-    ),
+    latestMetrics,
+    resourceSummary: buildResourceSummary(latestMetrics),
     latestSessions: (latestSessions as SessionSnapshotRow[]).map(toSessionSnapshot),
     latestSql: await listSqlPerformanceFromSupabase(dbInstanceId, 10),
     blockingCount: blockingCount ?? 0,

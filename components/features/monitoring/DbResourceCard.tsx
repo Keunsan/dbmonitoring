@@ -10,11 +10,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { ResourceSummary } from "@/lib/monitoring/resource-summary";
+import type { MetricHistoryRecord } from "@/services/storage/types";
 import type { DbInstance } from "@/types/entities";
 
 type DbResourceCardProps = {
   instance: DbInstance;
   resourceSummary: ResourceSummary;
+  latestMetrics: MetricHistoryRecord[];
   collectStatus: "OK" | "FAIL" | "DELAYED" | null;
 };
 
@@ -24,6 +26,7 @@ type DbResourceCardProps = {
 export const DbResourceCard = ({
   instance,
   resourceSummary,
+  latestMetrics,
   collectStatus,
 }: DbResourceCardProps) => (
   <Card>
@@ -39,7 +42,11 @@ export const DbResourceCard = ({
       </div>
     </CardHeader>
     <CardContent>
-      <ResourceOverviewCards resource={resourceSummary} compact />
+      <ResourceOverviewCards
+        resource={resourceSummary}
+        latestMetrics={latestMetrics}
+        compact
+      />
     </CardContent>
   </Card>
 );

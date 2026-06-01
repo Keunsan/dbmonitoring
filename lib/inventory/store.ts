@@ -3,9 +3,20 @@
 import { ApiRouteError, badRequest, notFound } from "@/lib/api";
 import { isSupabaseServerConfigured } from "@/lib/db/supabase-server";
 import {
+  purgeDbInstanceOperationalDataFromMemory,
+  purgeDbInstanceOperationalDataFromSupabase,
+  toBusinessSystemCreateError,
+  toBusinessSystemDeleteError,
+  toBusinessSystemUpdateError,
+  toDbInstanceCreateError,
+  toDbInstanceDeleteError,
+  toDbInstanceUpdateError,
+} from "@/lib/inventory/purge-db-instance-data";
+import {
   buildVaultConnectionSecretRef,
   parseConnectionSecretRef,
 } from "@/lib/secrets/refs";
+import { deleteConnectionSecret } from "@/lib/secrets";
 import { toConnectionTestApiError } from "@/lib/secrets/errors";
 import { maskHost, formatSecretRefForLog } from "@/lib/security/mask";
 import { createCollectorAdapter } from "@/services/collector/registry";
@@ -337,83 +348,95 @@ export const listBusinessSystems = async () => {
 };
 
 export const createBusinessSystem = async (input: BusinessSystemInput) => {
-  if (shouldUseSupabaseInventory()) {
-    return createBusinessSystemInSupabase(input);
+  try {
+    if (shouldUseSupabaseInventory()) {
+      return await createBusinessSystemInSupabase(input);
+    }
+
+    const state = getState();
+
+    if (state.businessSystems.some((system) => system.code === input.code)) {
+      throw badRequest("이미 등록된 업무 코드입니다.");
+    }
+
+    const createdAt = now();
+    const businessSystem: BusinessSystem = {
+      id: createId(),
+      tenantId: DEFAULT_TENANT_ID,
+      ...input,
+      ownerDept: input.ownerDept ?? null,
+      ownerName: input.ownerName ?? null,
+      ownerEmail: input.ownerEmail ?? null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    state.businessSystems.push(businessSystem);
+    return businessSystem;
+  } catch (error) {
+    throw toBusinessSystemCreateError(error);
   }
-
-  const state = getState();
-
-  if (state.businessSystems.some((system) => system.code === input.code)) {
-    throw badRequest("이미 등록된 업무 코드입니다.");
-  }
-
-  const createdAt = now();
-  const businessSystem: BusinessSystem = {
-    id: createId(),
-    tenantId: DEFAULT_TENANT_ID,
-    ...input,
-    ownerDept: input.ownerDept ?? null,
-    ownerName: input.ownerName ?? null,
-    ownerEmail: input.ownerEmail ?? null,
-    createdAt,
-    updatedAt: createdAt,
-  };
-
-  state.businessSystems.push(businessSystem);
-  return businessSystem;
 };
 
 export const updateBusinessSystem = async (
   id: string,
   input: BusinessSystemInput,
 ) => {
-  if (shouldUseSupabaseInventory()) {
-    return updateBusinessSystemInSupabase(id, input);
+  try {
+    if (shouldUseSupabaseInventory()) {
+      return await updateBusinessSystemInSupabase(id, input);
+    }
+
+    const state = getState();
+    const index = state.businessSystems.findIndex((system) => system.id === id);
+
+    if (index < 0) {
+      throw notFound("업무 시스템을 찾을 수 없습니다.");
+    }
+
+    state.businessSystems[index] = {
+      ...state.businessSystems[index],
+      ...input,
+      code: state.businessSystems[index].code,
+      ownerDept: input.ownerDept ?? null,
+      ownerName: input.ownerName ?? null,
+      ownerEmail: input.ownerEmail ?? null,
+      updatedAt: now(),
+    };
+
+    return state.businessSystems[index];
+  } catch (error) {
+    throw toBusinessSystemUpdateError(error);
   }
-
-  const state = getState();
-  const index = state.businessSystems.findIndex((system) => system.id === id);
-
-  if (index < 0) {
-    throw notFound("업무 시스템을 찾을 수 없습니다.");
-  }
-
-  state.businessSystems[index] = {
-    ...state.businessSystems[index],
-    ...input,
-    code: state.businessSystems[index].code,
-    ownerDept: input.ownerDept ?? null,
-    ownerName: input.ownerName ?? null,
-    ownerEmail: input.ownerEmail ?? null,
-    updatedAt: now(),
-  };
-
-  return state.businessSystems[index];
 };
 
 export const deleteBusinessSystem = async (id: string) => {
-  if (shouldUseSupabaseInventory()) {
-    await deleteBusinessSystemFromSupabase(id);
-    return;
+  try {
+    if (shouldUseSupabaseInventory()) {
+      await deleteBusinessSystemFromSupabase(id);
+      return;
+    }
+
+    const state = getState();
+
+    if (state.dbInstances.some((instance) => instance.businessSystemId === id)) {
+      throw new ApiRouteError({
+        code: "BUSINESS_SYSTEM_IN_USE",
+        message: "DB 인스턴스가 연결된 업무 시스템은 삭제할 수 없습니다.",
+        status: 409,
+      });
+    }
+
+    const nextSystems = state.businessSystems.filter((system) => system.id !== id);
+
+    if (nextSystems.length === state.businessSystems.length) {
+      throw notFound("업무 시스템을 찾을 수 없습니다.");
+    }
+
+    state.businessSystems = nextSystems;
+  } catch (error) {
+    throw toBusinessSystemDeleteError(error);
   }
-
-  const state = getState();
-
-  if (state.dbInstances.some((instance) => instance.businessSystemId === id)) {
-    throw new ApiRouteError({
-      code: "BUSINESS_SYSTEM_IN_USE",
-      message: "DB 인스턴스가 연결된 업무 시스템은 삭제할 수 없습니다.",
-      status: 409,
-    });
-  }
-
-  const nextSystems = state.businessSystems.filter((system) => system.id !== id);
-
-  if (nextSystems.length === state.businessSystems.length) {
-    throw notFound("업무 시스템을 찾을 수 없습니다.");
-  }
-
-  state.businessSystems = nextSystems;
 };
 
 export const listDbInstances = async () => {
@@ -439,36 +462,40 @@ export const getDbInstance = async (id: string) => {
 };
 
 export const createDbInstance = async (input: DbInstanceInput) => {
-  if (shouldUseSupabaseInventory()) {
-    return createDbInstanceInSupabase(input);
+  try {
+    if (shouldUseSupabaseInventory()) {
+      return await createDbInstanceInSupabase(input);
+    }
+
+    const state = getState();
+
+    if (!state.businessSystems.some((system) => system.id === input.businessSystemId)) {
+      throw badRequest("업무 시스템을 먼저 등록해주세요.");
+    }
+
+    const createdAt = now();
+    const id = createId();
+    const instance: DbInstance = {
+      id,
+      tenantId: DEFAULT_TENANT_ID,
+      ...input,
+      serviceName: input.serviceName ?? null,
+      databaseName: input.databaseName ?? null,
+      collectorId: input.collectorId ?? null,
+      connectionSecretRef: input.connectionSecretRef ?? buildVaultConnectionSecretRef(id),
+      lastCollectAt: null,
+      lastCollectStatus: null,
+      lastConnectionTestAt: null,
+      lastConnectionTestStatus: null,
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    state.dbInstances.push(instance);
+    return instance;
+  } catch (error) {
+    throw toDbInstanceCreateError(error);
   }
-
-  const state = getState();
-
-  if (!state.businessSystems.some((system) => system.id === input.businessSystemId)) {
-    throw badRequest("업무 시스템을 먼저 등록해주세요.");
-  }
-
-  const createdAt = now();
-  const id = createId();
-  const instance: DbInstance = {
-    id,
-    tenantId: DEFAULT_TENANT_ID,
-    ...input,
-    serviceName: input.serviceName ?? null,
-    databaseName: input.databaseName ?? null,
-    collectorId: input.collectorId ?? null,
-    connectionSecretRef: input.connectionSecretRef ?? buildVaultConnectionSecretRef(id),
-    lastCollectAt: null,
-    lastCollectStatus: null,
-    lastConnectionTestAt: null,
-    lastConnectionTestStatus: null,
-    createdAt,
-    updatedAt: createdAt,
-  };
-
-  state.dbInstances.push(instance);
-  return instance;
 };
 
 /**
@@ -486,45 +513,70 @@ export const updateDbInstanceSecretRef = async (id: string, connectionSecretRef:
 };
 
 export const updateDbInstance = async (id: string, input: DbInstanceInput) => {
-  if (shouldUseSupabaseInventory()) {
-    return updateDbInstanceInSupabase(id, input);
+  try {
+    if (shouldUseSupabaseInventory()) {
+      return await updateDbInstanceInSupabase(id, input);
+    }
+
+    const state = getState();
+    const index = state.dbInstances.findIndex((instance) => instance.id === id);
+
+    if (index < 0) {
+      throw notFound("DB 인스턴스를 찾을 수 없습니다.");
+    }
+
+    state.dbInstances[index] = {
+      ...state.dbInstances[index],
+      ...input,
+      serviceName: input.serviceName ?? null,
+      databaseName: input.databaseName ?? null,
+      collectorId: input.collectorId ?? null,
+      connectionSecretRef:
+        input.connectionSecretRef ?? state.dbInstances[index].connectionSecretRef,
+      updatedAt: now(),
+    };
+
+    return state.dbInstances[index];
+  } catch (error) {
+    throw toDbInstanceUpdateError(error);
   }
+};
 
-  const state = getState();
-  const index = state.dbInstances.findIndex((instance) => instance.id === id);
-
-  if (index < 0) {
-    throw notFound("DB 인스턴스를 찾을 수 없습니다.");
+const removeDbInstanceConnectionSecretBestEffort = async (instance: DbInstance) => {
+  try {
+    const parsed = parseConnectionSecretRef(instance.connectionSecretRef);
+    if (parsed.kind === "vault") {
+      await deleteConnectionSecret(parsed.vaultName);
+    }
+  } catch {
+    // Vault Secret이 없어도 인스턴스 삭제는 계속 진행합니다.
   }
-
-  state.dbInstances[index] = {
-    ...state.dbInstances[index],
-    ...input,
-    serviceName: input.serviceName ?? null,
-    databaseName: input.databaseName ?? null,
-    collectorId: input.collectorId ?? null,
-    connectionSecretRef:
-      input.connectionSecretRef ?? state.dbInstances[index].connectionSecretRef,
-    updatedAt: now(),
-  };
-
-  return state.dbInstances[index];
 };
 
 export const deleteDbInstance = async (id: string) => {
-  if (shouldUseSupabaseInventory()) {
-    await deleteDbInstanceFromSupabase(id);
-    return;
+  const instance = await getDbInstance(id);
+
+  try {
+    if (shouldUseSupabaseInventory()) {
+      await purgeDbInstanceOperationalDataFromSupabase(id);
+      await removeDbInstanceConnectionSecretBestEffort(instance);
+      await deleteDbInstanceFromSupabase(id);
+      return;
+    }
+
+    purgeDbInstanceOperationalDataFromMemory(id);
+
+    const state = getState();
+    const nextInstances = state.dbInstances.filter((item) => item.id !== id);
+
+    if (nextInstances.length === state.dbInstances.length) {
+      throw notFound("DB 인스턴스를 찾을 수 없습니다.");
+    }
+
+    state.dbInstances = nextInstances;
+  } catch (error) {
+    throw toDbInstanceDeleteError(error);
   }
-
-  const state = getState();
-  const nextInstances = state.dbInstances.filter((instance) => instance.id !== id);
-
-  if (nextInstances.length === state.dbInstances.length) {
-    throw notFound("DB 인스턴스를 찾을 수 없습니다.");
-  }
-
-  state.dbInstances = nextInstances;
 };
 
 export const updateCollectionSettings = async (

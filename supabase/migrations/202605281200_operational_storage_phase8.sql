@@ -46,6 +46,5 @@ create table if not exists public.sql_regression_event (
 
 create index if not exists idx_sql_regression_event_instance_detected
   on public.sql_regression_event (db_instance_id, detected_at desc);
-
 create index if not exists idx_sql_regression_event_instance_sql
   on public.sql_regression_event (db_instance_id, sql_id, detected_at desc);

@@ -12,10 +12,10 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
  */
 export const AppHeader = () => {
   return (
-    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
       <SidebarTrigger />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">
+        <p className="truncate font-mono text-sm font-medium tracking-tight text-foreground">
           통합 DB 모니터링 운영 포털
         </p>
         <p className="text-muted-foreground hidden text-xs sm:block">

@@ -9,7 +9,7 @@ import {
   LayoutDashboard,
   type LucideIcon,
   Settings,
-  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -51,15 +51,17 @@ export const AppSidebar = () => {
   const pathname = usePathname();
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="icon" className="border-sidebar-border/80">
       <SidebarHeader className="px-3 py-4">
         <div className="flex items-center gap-2 rounded-lg px-2">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <ShieldCheck className="size-4" />
+          <div className="flex size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_0_16px_-4px] shadow-primary/50 ring-1 ring-primary/30">
+            <Sparkles className="size-4" />
           </div>
           <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <p className="truncate text-sm font-semibold">DB Monitoring</p>
-            <p className="text-sidebar-foreground/60 truncate text-xs">
+            <p className="truncate font-mono text-sm font-semibold tracking-tight">
+              DB Monitoring
+            </p>
+            <p className="truncate text-xs text-sidebar-foreground/60">
               운영 통합 관제
             </p>
           </div>
@@ -89,6 +91,8 @@ export const AppSidebar = () => {
                           tooltip={item.label}
                           aria-disabled={!item.mvp}
                           className={cn(
+                            isActive &&
+                              "shadow-[0_0_14px_-5px] shadow-primary/45 ring-1 ring-primary/20",
                             !item.mvp &&
                               "cursor-not-allowed opacity-55 hover:bg-transparent",
                           )}
@@ -120,9 +124,9 @@ export const AppSidebar = () => {
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter className="p-3">
-        <div className="rounded-lg border bg-background p-3 text-xs group-data-[collapsible=icon]:hidden">
-          <p className="font-medium">MVP 구축 단계</p>
-          <p className="text-muted-foreground mt-1">
+        <div className="rounded-lg border border-sidebar-border/80 bg-sidebar-accent/50 p-3 text-xs group-data-[collapsible=icon]:hidden">
+          <p className="font-mono font-medium text-sidebar-foreground">MVP 구축 단계</p>
+          <p className="mt-1 text-sidebar-foreground/65">
             실시간 MSSQL 모니터링 구축 중
           </p>
         </div>
