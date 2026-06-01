@@ -176,3 +176,25 @@ npm run dev
 npm run build
 npm run lint
 ```
+
+
+
+이 프로젝트(dbmonitoring)는 회사망 ePrism SSL(WQNC) HTTPS 검사 때문에
+Node.js에서 Supabase 접속 시 SELF_SIGNED_CERT_IN_CHAIN 오류가 납니다.
+다른 노트북(Windows)에서 동일하게 개발할 수 있도록 아래를 진행해 주세요.
+1. Windows 인증서 저장소에서 ePrism SSL 루트 CA 찾기
+   - certmgr.msc → 신뢰할 수 있는 루트 인증 기관
+   - Subject: CN=ePrsim SSL, O=WQNC, C=KR
+   - 또는 PowerShell:
+     Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Subject -match 'ePrsim|WQNC' }
+2. certs/corp-ca.pem 생성 (프로젝트 루트)
+   - PEM 형식으로 저장 (Git에는 *.pem이 ignore됨)
+3. package.json의 dev 스크립트가 아래인지 확인:
+   "dev": "cross-env NODE_EXTRA_CA_CERTS=./certs/corp-ca.pem next dev"
+   - cross-env가 없으면 npm install 후 dev 스크립트 반영
+4. 검증
+   - $env:NODE_EXTRA_CA_CERTS = "<프로젝트절대경로>/certs/corp-ca.pem"
+   - node -e "fetch('https://tycbicshfxiyrxqmxrvc.supabase.co').then(r=>console.log('OK',r.status)).catch(e=>console.error('FAIL',e.cause?.code||e.message))"
+     → OK 404 이면 성공
+   - npm run dev 후 /api/monitoring/summary 가 200인지 확인
+.env.local은 Supabase URL/키만 맞으면 됩니다. NODE_TLS_REJECT_UNAUTHORIZED=0 은 사용하지 마세요.
