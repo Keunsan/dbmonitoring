@@ -39,70 +39,6 @@ type GlobalSchedulerState = typeof globalThis & {
 const now = () => new Date().toISOString();
 const SCHEDULER_TICK_MS = 1_000;
 
-// #region agent log
-const debugCollectorStepLog = (
-  message: string,
-  data: Record<string, unknown>,
-) => {
-  const payload = {
-    sessionId: "9dc30a",
-    runId: "erp-step-debug",
-    hypothesisId: "E1,E2,E3,E4",
-    location: "services/collector/scheduler/index.ts",
-    message,
-    data,
-    timestamp: Date.now(),
-  };
-
-  console.error("[AGENT_DEBUG_COLLECTOR_STEP]", payload);
-
-  fetch("http://127.0.0.1:7400/ingest/ce507061-2dfc-43ac-a17f-b1938c31136d", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "9dc30a",
-    },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-};
-
-const runCollectorStep = async <T>(
-  instance: DbInstance,
-  step: string,
-  action: () => Promise<T>,
-): Promise<T> => {
-  const startedAtMs = Date.now();
-
-  debugCollectorStepLog("collector step started", {
-    dbInstanceId: instance.id,
-    dbmsType: instance.dbmsType,
-    instanceName: instance.instanceName,
-    step,
-  });
-
-  try {
-    const result = await action();
-
-    debugCollectorStepLog("collector step completed", {
-      dbInstanceId: instance.id,
-      step,
-      elapsedMs: Date.now() - startedAtMs,
-    });
-
-    return result;
-  } catch (error) {
-    debugCollectorStepLog("collector step failed", {
-      dbInstanceId: instance.id,
-      step,
-      elapsedMs: Date.now() - startedAtMs,
-      error: serializeError(error),
-    });
-
-    throw error;
-  }
-};
-// #endregion
-
 const getState = () => {
   const globalState = globalThis as GlobalSchedulerState;
 
@@ -325,17 +261,6 @@ export const runCollectorForInstance = async (
   const startedAt = now();
 
   if (status.isRunning) {
-    // #region agent log
-    debugCollectorStepLog("collector skipped because status is already running", {
-      dbInstanceId: instance.id,
-      dbmsType: instance.dbmsType,
-      instanceName: instance.instanceName,
-      lastRunAt: status.lastRunAt,
-      nextRunAt: status.nextRunAt,
-      consecutiveFailures: status.consecutiveFailures,
-    });
-    // #endregion
-
     return {
       dbInstanceId: instance.id,
       startedAt,
@@ -356,27 +281,19 @@ export const runCollectorForInstance = async (
 
   try {
     const adapter = createCollectorAdapter(toCollectorContext(instance));
-    const availability = await runCollectorStep(instance, "availability", () =>
-      adapter.collectAvailability(),
-    );
+    const availability = await adapter.collectAvailability();
 
     if (!availability.isReachable) {
       throw new Error(availability.healthMessage ?? "DB 연결 확인에 실패했습니다.");
     }
 
-    const metrics = await runCollectorStep(instance, "metrics", () =>
-      adapter.collectMetrics(),
-    );
-    const sessions = await runCollectorStep(instance, "sessions", () =>
-      adapter.collectSessions(),
-    );
-    const locks = await runCollectorStep(instance, "locks", () => adapter.collectLocks());
-    const deadlocks = await runCollectorStep(instance, "deadlocks", () =>
-      adapter.collectDeadlocks(),
-    );
-    const sql = await runCollectorStep(instance, "sql", () => adapter.collectSql());
+    const metrics = await adapter.collectMetrics();
+    const sessions = await adapter.collectSessions();
+    const locks = await adapter.collectLocks();
+    const deadlocks = await adapter.collectDeadlocks();
+    const sql = await adapter.collectSql();
     const sqlPlans = adapter.collectSqlPlans
-      ? await runCollectorStep(instance, "sqlPlans", () => adapter.collectSqlPlans?.() ?? Promise.resolve([]))
+      ? await (adapter.collectSqlPlans?.() ?? Promise.resolve([]))
       : [];
 
     const result: CollectorRunResult = {
@@ -394,7 +311,7 @@ export const runCollectorForInstance = async (
       errorMessage: null,
     };
 
-    await runCollectorStep(instance, "saveCollectorRun", () => saveCollectorRun(result));
+    await saveCollectorRun(result);
 
     try {
       await detectSqlRegressions(instance.id);
@@ -408,9 +325,7 @@ export const runCollectorForInstance = async (
       });
     }
 
-    await runCollectorStep(instance, "updateCollectStatusOK", () =>
-      updateCollectStatus(instance.id, "OK"),
-    );
+    await updateCollectStatus(instance.id, "OK");
     status.lastStatus = "OK";
     status.lastErrorMessage = null;
     status.consecutiveFailures = 0;
@@ -421,12 +336,8 @@ export const runCollectorForInstance = async (
   } catch (error) {
     const result = createFailedResult(instance.id, startedAt, error);
 
-    await runCollectorStep(instance, "saveFailedCollectorRun", () =>
-      saveCollectorRun(result),
-    );
-    await runCollectorStep(instance, "updateCollectStatusFAIL", () =>
-      updateCollectStatus(instance.id, "FAIL"),
-    );
+    await saveCollectorRun(result);
+    await updateCollectStatus(instance.id, "FAIL");
     status.lastStatus = "FAIL";
     status.lastErrorMessage = result.errorMessage;
     status.consecutiveFailures += 1;

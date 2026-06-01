@@ -660,22 +660,6 @@ const SUMMARY_METRIC_LOOKBACK_MS = 2 * 60 * 60 * 1_000;
 export const getMonitoringSummaryFromSupabase = async (
   dbInstanceId: DbInstanceId,
 ): Promise<MonitoringSummary> => {
-  // #region agent log
-  fetch("http://127.0.0.1:7400/ingest/ce507061-2dfc-43ac-a17f-b1938c31136d", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4719f6" },
-    body: JSON.stringify({
-      sessionId: "4719f6",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "supabase-store.ts:getMonitoringSummaryFromSupabase:entry",
-      message: "summary query start",
-      data: { dbInstanceId },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const latestRun = (await listCollectionRunsFromSupabase(dbInstanceId))[0] ?? null;
   const recentMetrics = await listMetricHistoryFromSupabase({
     dbInstanceId,
@@ -683,22 +667,6 @@ export const getMonitoringSummaryFromSupabase = async (
     metricTimeGte: new Date(Date.now() - SUMMARY_METRIC_LOOKBACK_MS).toISOString(),
   });
   const latestMetrics = pickFullestMetricSnapshot(recentMetrics);
-
-  // #region agent log
-  fetch("http://127.0.0.1:7400/ingest/ce507061-2dfc-43ac-a17f-b1938c31136d", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "4719f6" },
-    body: JSON.stringify({
-      sessionId: "4719f6",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "supabase-store.ts:getMonitoringSummaryFromSupabase:metrics",
-      message: "metric history loaded",
-      data: { dbInstanceId, metricCount: recentMetrics.length },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
 
   const { data: latestSessionRow, error: sessionError } = await getClient()
     .from("session_snapshot")
