@@ -86,6 +86,23 @@ export const saveCollectorRunToMemory = async (result: CollectorRunResult) => {
   return normalized.collectionRun;
 };
 
+/** 세션 스냅샷만 저장합니다(실시간 세션 경량 수집). */
+export const saveSessionsCollectorRunToMemory = async (result: CollectorRunResult) => {
+  const state = getState();
+  const normalized = normalizeCollectorRun(result);
+
+  state.collectionRuns = trimBucket([
+    ...state.collectionRuns,
+    normalized.collectionRun,
+  ]);
+  state.sessionSnapshots = trimBucket([
+    ...state.sessionSnapshots,
+    ...normalized.sessionSnapshots,
+  ]);
+
+  return normalized.collectionRun;
+};
+
 export const listCollectionRunsFromMemory = async (
   dbInstanceId?: DbInstanceId,
 ): Promise<CollectionRunRecord[]> => {

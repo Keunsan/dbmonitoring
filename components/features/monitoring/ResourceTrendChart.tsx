@@ -1,8 +1,8 @@
 "use client";
 
-/** 서버 리소스 지표의 최근 추이를 간단한 라인 차트로 표시합니다. */
+/** 서버 리소스 지표의 최근 추이를 그룹별 멀티 라인 차트로 표시합니다. */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 import {
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/card";
 import {
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
@@ -26,24 +28,66 @@ type MetricHistoryItem = {
   metricValue: number;
 };
 
+type TrendMetricSeries = {
+  key: string;
+  dataKey: string;
+};
+
+type TrendChartGroup = {
+  id: string;
+  title: string;
+  metrics: TrendMetricSeries[];
+  config: ChartConfig;
+  yDomain?: [number, number];
+};
+
 type ResourceTrendChartProps = {
   dbInstanceId: string;
   title?: string;
 };
 
-const chartConfig = {
-  value: {
-    label: "값",
-    color: "var(--chart-1)",
-  },
+const formatTrendTime = (metricTime: string) =>
+  new Date(metricTime).toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+const cpuMemoryConfig = {
+  cpu: { label: "CPU %", color: "var(--chart-1)" },
+  memory: { label: "메모리 %", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
-const trendMetrics = [
-  { key: SERVER_METRIC_KEYS.cpuUsedPercent, label: "CPU %" },
-  { key: SERVER_METRIC_KEYS.memoryUsedPercent, label: "메모리 %" },
-  { key: SERVER_METRIC_KEYS.batchRequestsPerSec, label: "QPS" },
-  { key: SERVER_METRIC_KEYS.transactionsPerSec, label: "TPS" },
-] as const;
+const qpsTpsConfig = {
+  qps: { label: "QPS", color: "var(--chart-3)" },
+  tps: { label: "TPS", color: "var(--chart-4)" },
+} satisfies ChartConfig;
+
+const trendChartGroups: TrendChartGroup[] = [
+  {
+    id: "cpu-memory",
+    title: "CPU · 메모리",
+    metrics: [
+      { key: SERVER_METRIC_KEYS.cpuUsedPercent, dataKey: "cpu" },
+      { key: SERVER_METRIC_KEYS.memoryUsedPercent, dataKey: "memory" },
+    ],
+    config: cpuMemoryConfig,
+    yDomain: [0, 100],
+  },
+  {
+    id: "qps-tps",
+    title: "QPS · TPS",
+    metrics: [
+      { key: SERVER_METRIC_KEYS.batchRequestsPerSec, dataKey: "qps" },
+      { key: SERVER_METRIC_KEYS.transactionsPerSec, dataKey: "tps" },
+    ],
+    config: qpsTpsConfig,
+  },
+];
+
+const allTrendMetricKeys = trendChartGroups.flatMap((group) =>
+  group.metrics.map((metric) => metric.key),
+);
 
 const fetchMetricHistory = async (url: string) => {
   const response = await fetch(url);
@@ -52,6 +96,28 @@ const fetchMetricHistory = async (url: string) => {
     throw new Error(payload.error?.message ?? "지표 이력을 불러오지 못했습니다.");
   }
   return payload.data?.items ?? [];
+};
+
+/** 동일 시각 기준으로 여러 지표 시계열을 하나의 차트 데이터로 병합합니다. */
+const buildMergedChartData = (
+  seriesMap: Record<string, MetricHistoryItem[]>,
+  metrics: TrendMetricSeries[],
+) => {
+  const timeMap = new Map<string, Record<string, string | number>>();
+
+  for (const { key, dataKey } of metrics) {
+    for (const item of seriesMap[key] ?? []) {
+      const row = timeMap.get(item.metricTime) ?? {
+        time: formatTrendTime(item.metricTime),
+      };
+      row[dataKey] = item.metricValue;
+      timeMap.set(item.metricTime, row);
+    }
+  }
+
+  return [...timeMap.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, row]) => row);
 };
 
 /**
@@ -71,11 +137,11 @@ export const ResourceTrendChart = ({
     const load = async () => {
       try {
         const entries = await Promise.all(
-          trendMetrics.map(async (metric) => {
+          allTrendMetricKeys.map(async (metricKey) => {
             const items = await fetchMetricHistory(
-              `/api/monitoring/metrics?dbInstanceId=${encodeURIComponent(dbInstanceId)}&metricName=${encodeURIComponent(metric.key)}&limit=30`,
+              `/api/monitoring/metrics?dbInstanceId=${encodeURIComponent(dbInstanceId)}&metricName=${encodeURIComponent(metricKey)}&limit=30`,
             );
-            return [metric.key, items] as const;
+            return [metricKey, items] as const;
           }),
         );
         if (!cancelled) {
@@ -110,27 +176,24 @@ export const ResourceTrendChart = ({
     };
   }, [dbInstanceId]);
 
-  return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {trendMetrics.map((metric) => {
-        const items = seriesMap[metric.key] ?? [];
-        const chartData = [...items]
-          .sort((left, right) => left.metricTime.localeCompare(right.metricTime))
-          .map((item) => ({
-            time: new Date(item.metricTime).toLocaleTimeString("ko-KR", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            }),
-            value: item.metricValue,
-          }));
+  const chartGroups = useMemo(
+    () =>
+      trendChartGroups.map((group) => ({
+        ...group,
+        chartData: buildMergedChartData(seriesMap, group.metrics),
+      })),
+    [seriesMap],
+  );
 
-        const chartKey = `${dbInstanceId}-${metric.key}-${chartData.length}-${chartData.at(-1)?.value ?? "empty"}`;
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {chartGroups.map((group) => {
+        const chartKey = `${dbInstanceId}-${group.id}-${group.chartData.length}-${group.chartData.at(-1)?.time ?? "empty"}`;
 
         return (
-          <Card key={`${dbInstanceId}-${metric.key}`}>
+          <Card key={`${dbInstanceId}-${group.id}`}>
             <CardHeader className="pb-1.5">
-              <CardTitle className="text-base">{metric.label}</CardTitle>
+              <CardTitle className="text-base">{group.title}</CardTitle>
               <CardDescription>{title}</CardDescription>
             </CardHeader>
             <CardContent>
@@ -138,28 +201,37 @@ export const ResourceTrendChart = ({
                 <p className="text-destructive text-sm">{error}</p>
               ) : loading ? (
                 <p className="text-muted-foreground text-sm">추이 데이터를 불러오는 중입니다.</p>
-              ) : chartData.length === 0 ? (
+              ) : group.chartData.length === 0 ? (
                 <p className="text-muted-foreground text-sm">추이 데이터가 없습니다.</p>
               ) : (
-                <ChartContainer config={chartConfig} className="h-[160px] w-full">
+                <ChartContainer config={group.config} className="h-[160px] w-full">
                   <LineChart
                     key={chartKey}
-                    data={chartData}
-                    margin={{ left: 8, right: 8, top: 8 }}
+                    data={group.chartData}
+                    margin={{ left: 8, right: 8, top: 8, bottom: 4 }}
                   >
                     <CartesianGrid vertical={false} />
                     <XAxis dataKey="time" tickLine={false} axisLine={false} hide />
-                    <YAxis tickLine={false} axisLine={false} width={40} />
-                    <ChartTooltip content={<ChartTooltipContent />} />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--color-value)"
-                      strokeWidth={2.5}
-                      dot={{ r: 2, strokeWidth: 1 }}
-                      activeDot={{ r: 4 }}
-                      connectNulls
+                    <YAxis
+                      domain={group.yDomain}
+                      tickLine={false}
+                      axisLine={false}
+                      width={40}
                     />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <ChartLegend content={<ChartLegendContent />} />
+                    {group.metrics.map((metric) => (
+                      <Line
+                        key={metric.dataKey}
+                        type="monotone"
+                        dataKey={metric.dataKey}
+                        stroke={`var(--color-${metric.dataKey})`}
+                        strokeWidth={2.5}
+                        dot={{ r: 2, strokeWidth: 1 }}
+                        activeDot={{ r: 4 }}
+                        connectNulls
+                      />
+                    ))}
                   </LineChart>
                 </ChartContainer>
               )}

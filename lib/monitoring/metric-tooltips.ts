@@ -303,36 +303,30 @@ export const metricTooltipContent: Record<string, MetricTooltipContent> = {
       "동시 접속 부하를 볼 때 사용합니다. 활성 세션이 전체 대비 급증하면 장시간 실행 SQL을 확인합니다.",
   },
   "dashboard.top_list.cpu": {
-    definition:
-      "등록된 DB 인스턴스 중 현재 CPU 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
+    definition: "DB 서버 또는 Azure SQL 데이터베이스가 사용 중인 CPU 비율입니다.",
     formula:
-      "각 인스턴스 최신 수집값의 CPU 사용률(%)을 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+      "MSSQL은 성능 카운터/링버퍼 값을 사용하고, Azure SQL은 avg_cpu_percent를 사용합니다.",
     interpretation:
-      "목록 상단일수록 CPU 부하가 큰 DB입니다. 85% 이상이 지속되면 쿼리·인덱스·스케일 조정을 검토합니다.",
+      "85% 이상이면 부하 증가를 의심하고, 95% 이상이 지속되면 쿼리·인덱스·스케일 조정을 검토합니다. 목록은 CPU 사용률이 높은 인스턴스 순으로 최대 5개를 보여줍니다.",
   },
   "dashboard.top_list.memory": {
-    definition:
-      "등록된 DB 인스턴스 중 현재 메모리 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
+    definition: "DB 엔진 또는 Azure SQL 데이터베이스의 메모리 사용률입니다.",
     formula:
-      "각 인스턴스 최신 수집값의 메모리 사용률(%)을 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+      "MSSQL은 (전체 메모리 - 가용 메모리) / 전체 메모리 * 100, Azure SQL은 avg_memory_usage_percent입니다.",
     interpretation:
-      "목록 상단일수록 메모리 압박 가능성이 큽니다. PLE 하락·대기 증가와 함께 나타나는지 확인합니다.",
+      "높은 값 자체보다 장시간 고정되거나 PLE 하락, 대기 증가와 함께 나타나는지를 같이 봅니다. 목록은 메모리 사용률이 높은 인스턴스 순으로 최대 5개를 보여줍니다.",
   },
   "dashboard.top_list.disk_latency": {
-    definition:
-      "등록된 DB 인스턴스 중 디스크 읽기 지연이 가장 큰 순서대로 상위 5개를 표시합니다.",
-    formula:
-      "각 인스턴스의 disk_read_latency_ms(읽기 I/O 1회 평균 대기)를 비교해 내림차순 정렬합니다.",
+    definition: "읽기 I/O 1회당 평균 대기 시간입니다.",
+    formula: "io_stall_read_ms / num_of_reads입니다.",
     interpretation:
-      "목록 상단일수록 스토리지 읽기 병목 가능성이 큽니다. 20ms 이상 주의, 50ms 이상 지속 시 점검이 필요합니다.",
+      "20ms 이상이면 주의, 50ms 이상이 지속되면 스토리지 병목 가능성이 큽니다. 목록은 디스크 읽기 지연이 큰 인스턴스 순으로 최대 5개를 보여줍니다.",
   },
   "dashboard.top_list.log": {
-    definition:
-      "등록된 DB 인스턴스 중 트랜잭션 로그 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
-    formula:
-      "각 인스턴스 최신 수집값의 log_used_percent(%)를 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+    definition: "트랜잭션 로그 파일의 사용률입니다.",
+    formula: "DBCC SQLPERF(LOGSPACE) 또는 로그 파일 사용량 / 로그 크기 * 100입니다.",
     interpretation:
-      "목록 상단일수록 로그 파일 압박이 큽니다. 장기 트랜잭션, 백업 정책, 로그 증가 설정을 확인합니다.",
+      "높게 유지되면 장기 트랜잭션, 백업/복구 모델, 로그 증가 설정을 확인합니다. 목록은 로그 사용률이 높은 인스턴스 순으로 최대 5개를 보여줍니다.",
   },
   [BI_CHART_TOOLTIP_KEYS.mdfUsage]: {
     definition:

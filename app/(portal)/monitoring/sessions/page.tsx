@@ -5,7 +5,7 @@ import { MonitoringRealtimeClient } from "@/components/features/monitoring/Monit
 const SessionsMonitoringPage = () => (
   <MonitoringRealtimeClient
     title="실시간 세션"
-    description="최근 수집된 사용자 세션, Wait, 실행 SQL 정보를 확인합니다."
+    description="스케줄러가 저장한 최신 스냅샷을 10초마다 조회합니다. 즉시 수집은 상단 버튼을 사용하세요."
     variant="sessions"
   />
 );

@@ -10,18 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { ResourceSummary } from "@/lib/monitoring/resource-summary";
-import { cn } from "@/lib/utils";
 import type { MetricHistoryRecord } from "@/services/storage/types";
 import type { DbInstance } from "@/types/entities";
-import type { DbmsType } from "@/types/domain";
-
-/** DBMS 유형별 좌측 강조 색으로 인스턴스 카드를 구분합니다. */
-const dbmsAccentClass: Record<DbmsType, string> = {
-  MSSQL: "border-l-sky-500",
-  ORACLE: "border-l-amber-500",
-  AZURE_SQL: "border-l-violet-500",
-};
-
 type DbResourceCardProps = {
   instance: DbInstance;
   resourceSummary: ResourceSummary;
@@ -38,19 +28,8 @@ export const DbResourceCard = ({
   latestMetrics,
   collectStatus,
 }: DbResourceCardProps) => (
-  <Card
-    className={cn(
-      "border border-border bg-card shadow-md",
-      "border-l-4",
-      dbmsAccentClass[instance.dbmsType],
-      collectStatus === "FAIL" &&
-        "border-destructive/50 ring-1 ring-destructive/25",
-    )}
-  >
-    <CardHeader
-      data-dbms={instance.dbmsType}
-      className="instance-card-header border-b-0 pb-3"
-    >
+  <Card className="border border-border shadow-sm">
+    <CardHeader className="pb-3">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <CardTitle className="truncate text-base">{instance.instanceName}</CardTitle>

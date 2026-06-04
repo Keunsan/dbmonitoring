@@ -1,10 +1,15 @@
 /** 인스턴스별 Collector 실행 엔진입니다. */
 
 import { listDbInstances, updateCollectStatus } from "@/lib/inventory/store";
-import type { CollectorContext, CollectorRunResult } from "@/services/collector/types";
+import type {
+  CollectorContext,
+  CollectorRunOptions,
+  CollectorRunResult,
+  CollectorRunScope,
+} from "@/services/collector/types";
 import { detectSqlRegressions } from "@/lib/analysis/sql-regression";
 import { serializeError } from "@/lib/serialize-error";
-import { saveCollectorRun } from "@/services/storage";
+import { saveCollectorRun, saveSessionsCollectorRun } from "@/services/storage";
 import type { CollectStatus, DbInstanceId } from "@/types/domain";
 import type { DbInstance } from "@/types/entities";
 
@@ -106,7 +111,10 @@ const isRunDue = (status: MutableSchedulerStatus) => {
   return elapsedMs >= status.collectIntervalSec * 1_000;
 };
 
-const toCollectorContext = (instance: DbInstance): CollectorContext => ({
+const toCollectorContext = (
+  instance: DbInstance,
+  runScope?: CollectorRunScope,
+): CollectorContext => ({
   dbInstanceId: instance.id,
   dbmsType: instance.dbmsType,
   connectionSecretRef: instance.connectionSecretRef,
@@ -116,6 +124,7 @@ const toCollectorContext = (instance: DbInstance): CollectorContext => ({
   serviceName: instance.serviceName,
   databaseName: instance.databaseName,
   envType: instance.envType,
+  runScope,
 });
 
 const createFailedResult = (
@@ -258,6 +267,7 @@ export const startCollectorScheduler = () => {
  */
 export const runCollectorForInstance = async (
   dbInstanceId: DbInstanceId,
+  options: CollectorRunOptions = {},
 ): Promise<CollectorRunResult> => {
   const instance = (await listDbInstances()).find((item) => item.id === dbInstanceId);
 
@@ -269,6 +279,7 @@ export const runCollectorForInstance = async (
     throw new Error("비활성 DB 인스턴스는 수집할 수 없습니다.");
   }
 
+  const scope = options.scope ?? "full";
   const status = getOrCreateStatus(instance.id, instance.collectIntervalSec);
   const startedAt = now();
 
@@ -293,21 +304,34 @@ export const runCollectorForInstance = async (
 
   try {
     const { createCollectorAdapter } = await import("@/services/collector/registry");
-    const adapter = createCollectorAdapter(toCollectorContext(instance));
-    const availability = await adapter.collectAvailability();
+    const adapter = createCollectorAdapter(toCollectorContext(instance, scope));
 
-    if (!availability.isReachable) {
-      throw new Error(availability.healthMessage ?? "DB 연결 확인에 실패했습니다.");
+    let metrics: CollectorRunResult["metrics"] = [];
+    let sessions: CollectorRunResult["sessions"] = [];
+    let locks: CollectorRunResult["locks"] = [];
+    let deadlocks: CollectorRunResult["deadlocks"] = [];
+    let sql: CollectorRunResult["sql"] = [];
+    let sqlPlans: CollectorRunResult["sqlPlans"] = [];
+    let availability: CollectorRunResult["availability"] = null;
+
+    if (scope === "sessions") {
+      sessions = await adapter.collectSessions();
+    } else {
+      availability = await adapter.collectAvailability();
+
+      if (!availability.isReachable) {
+        throw new Error(availability.healthMessage ?? "DB 연결 확인에 실패했습니다.");
+      }
+
+      metrics = await adapter.collectMetrics();
+      sessions = await adapter.collectSessions();
+      locks = await adapter.collectLocks();
+      deadlocks = await adapter.collectDeadlocks();
+      sql = await adapter.collectSql();
+      sqlPlans = adapter.collectSqlPlans
+        ? await (adapter.collectSqlPlans?.() ?? Promise.resolve([]))
+        : [];
     }
-
-    const metrics = await adapter.collectMetrics();
-    const sessions = await adapter.collectSessions();
-    const locks = await adapter.collectLocks();
-    const deadlocks = await adapter.collectDeadlocks();
-    const sql = await adapter.collectSql();
-    const sqlPlans = adapter.collectSqlPlans
-      ? await (adapter.collectSqlPlans?.() ?? Promise.resolve([]))
-      : [];
 
     const result: CollectorRunResult = {
       dbInstanceId: instance.id,
@@ -324,18 +348,24 @@ export const runCollectorForInstance = async (
       errorMessage: null,
     };
 
-    await saveCollectorRun(result);
+    if (scope === "sessions") {
+      await saveSessionsCollectorRun(result);
+    } else {
+      await saveCollectorRun(result);
+    }
 
-    try {
-      await detectSqlRegressions(instance.id);
-    } catch (regressionError) {
-      console.warn("[COLLECTOR_REGRESSION_DETECT_FAILED]", {
-        dbInstanceId: instance.id,
-        message:
-          regressionError instanceof Error
-            ? regressionError.message
-            : "회귀 탐지 중 오류가 발생했습니다.",
-      });
+    if (scope === "full") {
+      try {
+        await detectSqlRegressions(instance.id);
+      } catch (regressionError) {
+        console.warn("[COLLECTOR_REGRESSION_DETECT_FAILED]", {
+          dbInstanceId: instance.id,
+          message:
+            regressionError instanceof Error
+              ? regressionError.message
+              : "회귀 탐지 중 오류가 발생했습니다.",
+        });
+      }
     }
 
     await updateCollectStatus(instance.id, "OK");

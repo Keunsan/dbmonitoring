@@ -30,13 +30,18 @@ const CONNECTION_LABELS: Record<CollectStatus, string> = {
 };
 
 const STATUS_STYLES: Record<DbHealth | CollectStatus, string> = {
-  NORMAL: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  CAUTION: "border-amber-200 bg-amber-50 text-amber-700",
-  WARNING: "border-orange-200 bg-orange-50 text-orange-700",
-  OUTAGE: "border-red-200 bg-red-50 text-red-700",
-  OK: "border-emerald-200 bg-emerald-50 text-emerald-700",
-  FAIL: "border-red-200 bg-red-50 text-red-700",
-  DELAYED: "border-amber-200 bg-amber-50 text-amber-700",
+  NORMAL:
+    "border-emerald-200/90 bg-emerald-50 text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-500/20 dark:text-emerald-400",
+  CAUTION:
+    "border-amber-200/90 bg-amber-50 text-amber-800 dark:border-amber-500/55 dark:bg-amber-500/20 dark:text-amber-400",
+  WARNING:
+    "border-orange-200/90 bg-orange-50 text-orange-800 dark:border-orange-500/55 dark:bg-orange-500/20 dark:text-orange-400",
+  OUTAGE:
+    "border-red-200/90 bg-red-50 text-red-800 dark:border-red-500/65 dark:bg-red-500/20 dark:text-red-400",
+  OK: "border-emerald-200/90 bg-emerald-50 font-medium text-emerald-800 dark:border-emerald-500/55 dark:bg-emerald-500/20 dark:text-emerald-400",
+  FAIL: "border-red-200/90 bg-red-50 font-medium text-red-800 dark:border-red-500/65 dark:bg-red-500/20 dark:text-red-400",
+  DELAYED:
+    "border-amber-200/90 bg-amber-50 font-medium text-amber-800 dark:border-amber-500/55 dark:bg-amber-500/20 dark:text-amber-400",
 };
 
 /**

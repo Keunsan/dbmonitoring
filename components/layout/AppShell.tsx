@@ -6,7 +6,9 @@ import type { ReactNode } from "react";
 
 import { AppHeader } from "@/components/layout/AppHeader";
 import { AppSidebar } from "@/components/layout/AppSidebar";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { PortalSidebarProvider } from "@/components/layout/PortalSidebarProvider";
+import { SidebarInset } from "@/components/ui/sidebar";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 type AppShellProps = {
@@ -19,7 +21,7 @@ type AppShellProps = {
 export const AppShell = ({ children }: AppShellProps) => {
   return (
     <TooltipProvider>
-      <SidebarProvider>
+      <PortalSidebarProvider>
         <AppSidebar />
         <SidebarInset className="max-h-svh min-h-svh overflow-hidden bg-background">
           <AppHeader />
@@ -27,7 +29,8 @@ export const AppShell = ({ children }: AppShellProps) => {
             {children}
           </div>
         </SidebarInset>
-      </SidebarProvider>
+      </PortalSidebarProvider>
+      <Toaster position="bottom-center" duration={2000} />
     </TooltipProvider>
   );
 };

@@ -6,12 +6,13 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { Activity, BarChart3, HardDrive, MemoryStick, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
+import { CollectRunButton } from "@/components/features/monitoring/CollectRunButton";
+import { CollectionReferenceBar } from "@/components/features/monitoring/CollectionReferenceBar";
 import { PageHeader } from "@/components/layout";
 import { MetricInfoTooltip } from "@/components/features/monitoring/MetricInfoTooltip";
 import { EmptyState } from "@/components/shared";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/monitoring/storage-capacity";
 import type { ResourceSummary } from "@/lib/monitoring/resource-summary";
 import { getResourceHealth } from "@/lib/monitoring/resource-summary";
+import { SERVER_METRIC_KEYS } from "@/lib/monitoring/metric-keys";
 import { BI_CHART_TOOLTIP_KEYS, type BiChartTooltipKey } from "@/lib/monitoring/metric-tooltips";
 import type { MetricHistoryRecord } from "@/services/storage/types";
 import type { ApiResponse } from "@/types/api";
@@ -42,14 +44,14 @@ import { cn } from "@/lib/utils";
 
 /** 다중 시리즈 차트에서 구분이 잘 되도록 고정 대비 색상을 사용합니다. */
 const CHART_SERIES = {
-  cpu: "oklch(0.78 0.17 195)",
-  memory: "oklch(0.82 0.17 55)",
-  qps: "oklch(0.72 0.2 285)",
-  tps: "oklch(0.76 0.19 145)",
-  readLatency: "oklch(0.78 0.17 195)",
-  writeLatency: "oklch(0.82 0.17 55)",
-  sessionIdle: "oklch(0.32 0.025 285)",
-  sessionActive: "oklch(0.76 0.19 145)",
+  cpu: "var(--chart-series-cpu)",
+  memory: "var(--chart-series-memory)",
+  qps: "var(--chart-series-qps)",
+  tps: "var(--chart-series-tps)",
+  readLatency: "var(--chart-series-read-latency)",
+  writeLatency: "var(--chart-series-write-latency)",
+  sessionIdle: "var(--chart-series-session-idle)",
+  sessionActive: "var(--chart-series-session-active)",
 } as const;
 
 type SummaryItem = {
@@ -117,42 +119,128 @@ const throughputBarConfig = {
   tps: { label: "TPS", color: CHART_SERIES.tps },
 } satisfies ChartConfig;
 
+const cpuOnlyBarConfig = {
+  cpu: { label: "CPU %", color: CHART_SERIES.cpu },
+} satisfies ChartConfig;
+
+const memoryOnlyBarConfig = {
+  memory: { label: "메모리 %", color: CHART_SERIES.memory },
+} satisfies ChartConfig;
+
+const qpsOnlyBarConfig = {
+  qps: { label: "QPS", color: CHART_SERIES.qps },
+} satisfies ChartConfig;
+
+const tpsOnlyBarConfig = {
+  tps: { label: "TPS", color: CHART_SERIES.tps },
+} satisfies ChartConfig;
+
+type DashboardBiVariant = "v1" | "v2";
+
+const DASHBOARD_BI_META: Record<
+  DashboardBiVariant,
+  { title: string; description: string }
+> = {
+  v1: {
+    title: "통합 현황_v1",
+    description:
+      "MDF/LDF 사용량(GB), CPU·메모리·I/O·처리량·세션을 차트와 히트맵으로 비교합니다.",
+  },
+  v2: {
+    title: "통합 현황_v2",
+    description:
+      "CPU·메모리·QPS·TPS·세션·I/O·데이터·로그 파일 크기를 인스턴스별 차트와 히트맵으로 비교합니다.",
+  },
+};
+
 const sessionStackConfig = {
   idle: { label: "비활성·기타", color: CHART_SERIES.sessionIdle },
   active: { label: "활성 세션", color: CHART_SERIES.sessionActive },
 } satisfies ChartConfig;
 
-const HEATMAP_METRICS: Array<{
-  key: keyof ResourceSummary;
-  label: string;
-  unit: string;
-}> = [
-  { key: "cpuUsedPercent", label: "CPU", unit: "%" },
-  { key: "memoryUsedPercent", label: "메모리", unit: "%" },
-  { key: "diskReadLatencyMs", label: "디스크 읽기", unit: "ms" },
-  { key: "logUsedPercent", label: "로그", unit: "%" },
-  { key: "batchRequestsPerSec", label: "QPS", unit: "" },
-  { key: "processesBlocked", label: "Blocked", unit: "" },
-  { key: "sessionActiveCount", label: "활성 세션", unit: "" },
+type HeatmapColumnId =
+  | "cpuUsedPercent"
+  | "memoryUsedPercent"
+  | "diskReadLatencyMs"
+  | "mdfDataSizeGb"
+  | "batchRequestsPerSec"
+  | "transactionsPerSec"
+  | "sessionActiveTotal";
+
+const HEATMAP_COLUMNS: Array<{ id: HeatmapColumnId; label: string }> = [
+  { id: "cpuUsedPercent", label: "CPU" },
+  { id: "memoryUsedPercent", label: "메모리" },
+  { id: "diskReadLatencyMs", label: "디스크 읽기" },
+  { id: "mdfDataSizeGb", label: "데이터크기" },
+  { id: "batchRequestsPerSec", label: "QPS" },
+  { id: "transactionsPerSec", label: "TPS" },
+  { id: "sessionActiveTotal", label: "활성/전체세션수" },
 ];
+
+type HeatmapCell = {
+  display: string;
+  health: ReturnType<typeof getResourceHealth>;
+  sortValue: number | null;
+};
+
+/** 히트맵 열별 표시·정렬·건강도 값을 계산합니다. */
+const getHeatmapCell = (item: SummaryItem, columnId: HeatmapColumnId): HeatmapCell => {
+  const { resourceSummary, latestMetrics } = item.summary;
+
+  if (columnId === "mdfDataSizeGb") {
+    const capacity = extractInstanceStorageCapacity(latestMetrics, resourceSummary);
+    const mdfGb = mbToGb(capacity.mdfUsedMb);
+    return {
+      display: formatStorageGb(mdfGb),
+      health: getResourceHealth("storageUsedPercent", capacity.mdfUsedPercent),
+      sortValue: mdfGb,
+    };
+  }
+
+  if (columnId === "sessionActiveTotal") {
+    const active = resourceSummary.sessionActiveCount;
+    const total = resourceSummary.sessionTotalCount;
+    const display =
+      active !== null && total !== null
+        ? `${formatNumber(active, 0)}/${formatNumber(total, 0)}`
+        : "-";
+    return {
+      display,
+      health: "unknown",
+      sortValue: active,
+    };
+  }
+
+  const value = resourceSummary[columnId];
+  let unitSuffix = "";
+  if (columnId === "cpuUsedPercent" || columnId === "memoryUsedPercent") {
+    unitSuffix = "%";
+  } else if (columnId === "diskReadLatencyMs") {
+    unitSuffix = "ms";
+  }
+  const display = value === null ? "-" : `${formatNumber(value)}${unitSuffix}`;
+
+  return {
+    display,
+    health: getResourceHealth(columnId, value),
+    sortValue: value,
+  };
+};
 
 const heatColorClass = (health: ReturnType<typeof getResourceHealth>) => {
   switch (health) {
     case "warning":
-      return "bg-destructive/35 text-destructive-foreground";
+      return "bg-destructive/20 text-red-950 dark:bg-destructive/35 dark:text-destructive-foreground";
     case "caution":
-      return "bg-amber-500/30 text-amber-100";
+      return "bg-amber-400/35 text-amber-950 dark:bg-amber-500/30 dark:text-amber-100";
     case "normal":
-      return "bg-primary/25 text-foreground";
+      return "bg-primary/12 text-foreground dark:bg-primary/25";
     default:
       return "bg-muted/40 text-muted-foreground";
   }
 };
 
-type HeatmapSortKey =
-  | "instanceName"
-  | (typeof HEATMAP_METRICS)[number]["key"]
-  | "collectStatus";
+type HeatmapSortKey = "instanceName" | HeatmapColumnId | "collectStatus";
 
 const COLLECT_STATUS_ORDER: Record<string, number> = {
   OK: 0,
@@ -189,8 +277,7 @@ const getHeatmapSortValue = (
     return item.summary.lastRun?.status ?? null;
   }
 
-  const value = item.summary.resourceSummary[sortKey];
-  return value === null || value === undefined ? null : Number(value);
+  return getHeatmapCell(item, sortKey).sortValue;
 };
 
 /** 인스턴스 × 지표 히트맵 테이블입니다. */
@@ -261,18 +348,18 @@ const InstanceMetricHeatmap = ({ items }: { items: SummaryItem[] }) => {
                   DB 인스턴스{sortIndicator("instanceName")}
                 </button>
               </th>
-              {HEATMAP_METRICS.map((metric) => (
+              {HEATMAP_COLUMNS.map((column) => (
                 <th
-                  key={metric.key}
+                  key={column.id}
                   className="px-2 py-2 text-center font-mono text-xs text-muted-foreground"
                 >
                   <button
                     type="button"
                     className="cursor-pointer transition-colors hover:text-foreground"
-                    onClick={() => toggleSort(metric.key)}
+                    onClick={() => toggleSort(column.id)}
                   >
-                    {metric.label}
-                    {sortIndicator(metric.key)}
+                    {column.label}
+                    {sortIndicator(column.id)}
                   </button>
                 </th>
               ))}
@@ -299,22 +386,19 @@ const InstanceMetricHeatmap = ({ items }: { items: SummaryItem[] }) => {
                     {item.instance.dbmsType}
                   </div>
                 </td>
-                {HEATMAP_METRICS.map((metric) => {
-                  const value = item.summary.resourceSummary[metric.key];
-                  const health = getResourceHealth(metric.key, value);
-                  const display =
-                    value === null ? "-" : `${formatNumber(value)}${metric.unit}`;
+                {HEATMAP_COLUMNS.map((column) => {
+                  const cell = getHeatmapCell(item, column.id);
 
                   return (
-                    <td key={metric.key} className="p-1">
+                    <td key={column.id} className="p-1">
                       <div
-                        title={`${metric.label}: ${display}`}
+                        title={`${column.label}: ${cell.display}`}
                         className={cn(
                           "flex min-h-10 items-center justify-center rounded-md px-1 font-mono text-xs tabular-nums",
-                          heatColorClass(health),
+                          heatColorClass(cell.health),
                         )}
                       >
-                        {display}
+                        {cell.display}
                       </div>
                     </td>
                   );
@@ -324,7 +408,7 @@ const InstanceMetricHeatmap = ({ items }: { items: SummaryItem[] }) => {
                     <StatusBadge
                       kind="collect"
                       value={item.summary.lastRun.status}
-                      className="mx-auto border-primary/20 bg-primary/10 text-foreground"
+                      className="mx-auto"
                     />
                   ) : (
                     <span className="text-muted-foreground text-xs">-</span>
@@ -339,14 +423,17 @@ const InstanceMetricHeatmap = ({ items }: { items: SummaryItem[] }) => {
   );
 };
 
+type DashboardBiClientProps = {
+  variant?: DashboardBiVariant;
+};
+
 /**
- * DB 리소스 BI 대시보드(v1)를 렌더링합니다.
+ * DB 리소스 BI 대시보드를 렌더링합니다. v1·v2는 차트 배치만 다릅니다.
  */
-export const DashboardBiClient = () => {
+export const DashboardBiClient = ({ variant = "v1" }: DashboardBiClientProps) => {
+  const meta = DASHBOARD_BI_META[variant];
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -388,26 +475,15 @@ export const DashboardBiClient = () => {
     };
   }, [refresh]);
 
-  const runCollector = async () => {
-    setRunning(true);
-    setMessage(null);
+  const handleManualCollect = useCallback(async () => {
     setError(null);
-    try {
-      await requestJson("/api/collector/run", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await requestJson("/api/alerts/evaluate", { method: "POST" });
-      await refresh();
-      setMessage("Collector 실행과 임계치 평가가 완료되었습니다.");
-    } catch (runError) {
-      setError(
-        runError instanceof Error ? runError.message : "Collector 실행에 실패했습니다.",
-      );
-    } finally {
-      setRunning(false);
-    }
-  };
+    await requestJson("/api/collector/run", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    await requestJson("/api/alerts/evaluate", { method: "POST" });
+    await refresh();
+  }, [refresh]);
 
   const sortedItems = useMemo(
     () =>
@@ -512,20 +588,25 @@ export const DashboardBiClient = () => {
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
-        title="통합 현황_v1"
-        description="MDF/LDF 사용량(GB), CPU·메모리·I/O·처리량·세션을 차트와 히트맵으로 비교합니다."
+        title={meta.title}
+        description={meta.description}
+        descriptionBesideTitle
         actions={
-          <Button onClick={() => void runCollector()} disabled={running}>
-            {running ? "수집 중" : "실시간 수집 실행"}
-          </Button>
+          <CollectRunButton
+            onCollect={handleManualCollect}
+            onFailed={(failedMessage) => setError(failedMessage)}
+          />
+        }
+        actionsMeta={
+          <CollectionReferenceBar
+            layout="compact"
+            loading={loading}
+            items={items}
+            mode="dashboard"
+          />
         }
       />
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-        {message ? (
-          <Alert className="border-primary/30 bg-primary/10 text-foreground">
-            <AlertDescription>{message}</AlertDescription>
-          </Alert>
-        ) : null}
+      <div className="portal-content-canvas min-h-0 flex-1 space-y-4 overflow-y-auto p-4 md:p-5">
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -541,6 +622,188 @@ export const DashboardBiClient = () => {
           />
         ) : (
           <div className="space-y-4">
+            <BiChartGrid
+              variant={variant}
+              resourceBarData={resourceBarData}
+              ioBarData={ioBarData}
+              throughputBarData={throughputBarData}
+              sessionByInstanceData={sessionByInstanceData}
+              mdfUsageData={mdfUsageData}
+              ldfUsageData={ldfUsageData}
+            />
+
+            <InstanceMetricHeatmap items={items} />
+          </div>
+        )}
+      </div>
+    </main>
+  );
+};
+
+/** 통합 현황_v2 전용 래퍼입니다. */
+export const DashboardBiV2Client = () => <DashboardBiClient variant="v2" />;
+
+type BiChartGridProps = {
+  variant: DashboardBiVariant;
+  resourceBarData: Array<{ name: string; cpu: number; memory: number }>;
+  ioBarData: Array<{ name: string; readLatency: number; writeLatency: number }>;
+  throughputBarData: Array<{ name: string; qps: number; tps: number }>;
+  sessionByInstanceData: Array<{ name: string; active: number; idle: number }>;
+  mdfUsageData: Array<{ name: string; mdfGb: number }>;
+  ldfUsageData: Array<{ name: string; ldfGb: number }>;
+};
+
+/** v1·v2 차트 그리드 배치를 렌더링합니다. */
+const BiChartGrid = ({
+  variant,
+  resourceBarData,
+  ioBarData,
+  throughputBarData,
+  sessionByInstanceData,
+  mdfUsageData,
+  ldfUsageData,
+}: BiChartGridProps) => {
+  if (variant === "v2") {
+    return (
+      <>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ChartPanel
+            title="CPU 사용률"
+            description="인스턴스별 현재 CPU 부하(%)"
+            tooltipKey={SERVER_METRIC_KEYS.cpuUsedPercent}
+            icon={<Activity className="size-4" />}
+          >
+            <InstanceMetricBarChart
+              data={resourceBarData}
+              dataKey="cpu"
+              config={cpuOnlyBarConfig}
+              yDomain={[0, 100]}
+            />
+          </ChartPanel>
+
+          <ChartPanel
+            title="메모리 사용률"
+            description="인스턴스별 현재 메모리 사용률(%)"
+            tooltipKey={SERVER_METRIC_KEYS.memoryUsedPercent}
+            icon={<MemoryStick className="size-4" />}
+          >
+            <InstanceMetricBarChart
+              data={resourceBarData}
+              dataKey="memory"
+              config={memoryOnlyBarConfig}
+              yDomain={[0, 100]}
+            />
+          </ChartPanel>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ChartPanel
+            title="QPS"
+            description="인스턴스별 초당 배치 요청 수"
+            tooltipKey={SERVER_METRIC_KEYS.batchRequestsPerSec}
+            icon={<Activity className="size-4" />}
+          >
+            <InstanceMetricBarChart
+              data={throughputBarData}
+              dataKey="qps"
+              config={qpsOnlyBarConfig}
+            />
+          </ChartPanel>
+
+          <ChartPanel
+            title="TPS"
+            description="인스턴스별 초당 트랜잭션 수"
+            tooltipKey={SERVER_METRIC_KEYS.transactionsPerSec}
+            icon={<Activity className="size-4" />}
+          >
+            <InstanceMetricBarChart
+              data={throughputBarData}
+              dataKey="tps"
+              config={tpsOnlyBarConfig}
+            />
+          </ChartPanel>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ChartPanel
+            title="인스턴스별 세션"
+            description="DB 인스턴스별 전체 세션 대비 활성 세션(누적 세로 막대)"
+            tooltipKey={BI_CHART_TOOLTIP_KEYS.sessionsByInstance}
+            icon={<Users className="size-4" />}
+          >
+            <SessionStackBarChart data={sessionByInstanceData} />
+          </ChartPanel>
+
+          <ChartPanel
+            title="디스크 I/O 지연"
+            description="읽기·쓰기 평균 지연(ms)"
+            tooltipKey={BI_CHART_TOOLTIP_KEYS.diskIo}
+            icon={<BarChart3 className="size-4" />}
+          >
+            <ChartContainer config={ioBarConfig} className={cn("w-full", BI_CHART_HEIGHT)}>
+              <BarChart
+                data={ioBarData}
+                margin={{ left: 8, right: 8, top: 8, bottom: 4 }}
+              >
+                <CartesianGrid vertical={false} />
+                <XAxis {...instanceNameXAxisProps} />
+                <YAxis tickLine={false} axisLine={false} width={36} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar
+                  dataKey="readLatency"
+                  fill={CHART_SERIES.readLatency}
+                  radius={[2, 2, 0, 0]}
+                />
+                <Bar
+                  dataKey="writeLatency"
+                  fill={CHART_SERIES.writeLatency}
+                  radius={[2, 2, 0, 0]}
+                />
+              </BarChart>
+            </ChartContainer>
+          </ChartPanel>
+        </div>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <ChartPanel
+            title="데이터파일 크기"
+            description="데이터파일(MDF) 실사용 용량(GB) — 인스턴스명 순"
+            tooltipKey={BI_CHART_TOOLTIP_KEYS.mdfUsage}
+            icon={<HardDrive className="size-4" />}
+          >
+            <UsageTopBarChart
+              data={mdfUsageData}
+              dataKey="mdfGb"
+              config={{
+                mdfGb: { label: "MDF (GB)", color: "var(--chart-1)" },
+              }}
+              emptyMessage="데이터파일 크기 데이터가 없습니다"
+            />
+          </ChartPanel>
+
+          <ChartPanel
+            title="로그파일 크기"
+            description="트랜잭션 로그(LDF) 실사용 용량(GB) — 인스턴스명 순"
+            tooltipKey={BI_CHART_TOOLTIP_KEYS.ldfUsage}
+            icon={<HardDrive className="size-4" />}
+          >
+            <UsageTopBarChart
+              data={ldfUsageData}
+              dataKey="ldfGb"
+              config={{
+                ldfGb: { label: "LDF (GB)", color: "var(--chart-4)" },
+              }}
+              emptyMessage="로그파일 크기 데이터가 없습니다"
+            />
+          </ChartPanel>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
             <div className="grid gap-3 lg:grid-cols-2">
               <ChartPanel
                 title="MDF 사용량"
@@ -656,52 +919,85 @@ export const DashboardBiClient = () => {
                 tooltipKey={BI_CHART_TOOLTIP_KEYS.sessionsByInstance}
                 icon={<Users className="size-4" />}
               >
-                {sessionByInstanceData.length === 0 ? (
-                  <p
-                    className={cn(
-                      "text-muted-foreground flex items-center justify-center text-sm",
-                      BI_CHART_HEIGHT,
-                    )}
-                  >
-                    세션 데이터가 없습니다
-                  </p>
-                ) : (
-                  <ChartContainer
-                    config={sessionStackConfig}
-                    className={cn("w-full", BI_CHART_HEIGHT)}
-                  >
-                    <BarChart
-                      data={sessionByInstanceData}
-                      margin={{ left: 8, right: 8, top: 8, bottom: 4 }}
-                    >
-                      <CartesianGrid vertical={false} />
-                      <XAxis {...instanceNameXAxisProps} />
-                      <YAxis tickLine={false} axisLine={false} width={40} allowDecimals={false} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <ChartLegend content={<ChartLegendContent />} />
-                      <Bar
-                        dataKey="idle"
-                        stackId="sessions"
-                        fill={CHART_SERIES.sessionIdle}
-                        radius={[0, 0, 0, 0]}
-                      />
-                      <Bar
-                        dataKey="active"
-                        stackId="sessions"
-                        fill={CHART_SERIES.sessionActive}
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                )}
+                <SessionStackBarChart data={sessionByInstanceData} />
               </ChartPanel>
             </div>
+    </>
+  );
+};
 
-            <InstanceMetricHeatmap items={items} />
-          </div>
+type InstanceMetricBarChartProps = {
+  data: Array<Record<string, string | number>>;
+  dataKey: string;
+  config: ChartConfig;
+  yDomain?: [number, number];
+};
+
+/** 인스턴스별 단일 지표 세로 막대 차트입니다. */
+const InstanceMetricBarChart = ({
+  data,
+  dataKey,
+  config,
+  yDomain,
+}: InstanceMetricBarChartProps) => (
+  <ChartContainer config={config} className={cn("w-full", BI_CHART_HEIGHT)}>
+    <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 4 }}>
+      <CartesianGrid vertical={false} />
+      <XAxis {...instanceNameXAxisProps} />
+      <YAxis
+        domain={yDomain}
+        tickLine={false}
+        axisLine={false}
+        width={yDomain ? 32 : 40}
+      />
+      <ChartTooltip content={<ChartTooltipContent />} />
+      <ChartLegend content={<ChartLegendContent />} />
+      <Bar dataKey={dataKey} fill={`var(--color-${dataKey})`} radius={[4, 4, 0, 0]} />
+    </BarChart>
+  </ChartContainer>
+);
+
+type SessionStackBarChartProps = {
+  data: Array<{ name: string; active: number; idle: number }>;
+};
+
+/** 인스턴스별 활성·비활성 세션 누적 막대 차트입니다. */
+const SessionStackBarChart = ({ data }: SessionStackBarChartProps) => {
+  if (data.length === 0) {
+    return (
+      <p
+        className={cn(
+          "text-muted-foreground flex items-center justify-center text-sm",
+          BI_CHART_HEIGHT,
         )}
-      </div>
-    </main>
+      >
+        세션 데이터가 없습니다
+      </p>
+    );
+  }
+
+  return (
+    <ChartContainer config={sessionStackConfig} className={cn("w-full", BI_CHART_HEIGHT)}>
+      <BarChart data={data} margin={{ left: 8, right: 8, top: 8, bottom: 4 }}>
+        <CartesianGrid vertical={false} />
+        <XAxis {...instanceNameXAxisProps} />
+        <YAxis tickLine={false} axisLine={false} width={40} allowDecimals={false} />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <ChartLegend content={<ChartLegendContent />} />
+        <Bar
+          dataKey="idle"
+          stackId="sessions"
+          fill={CHART_SERIES.sessionIdle}
+          radius={[0, 0, 0, 0]}
+        />
+        <Bar
+          dataKey="active"
+          stackId="sessions"
+          fill={CHART_SERIES.sessionActive}
+          radius={[4, 4, 0, 0]}
+        />
+      </BarChart>
+    </ChartContainer>
   );
 };
 
@@ -759,7 +1055,7 @@ const UsageTopBarChart = ({
 type ChartPanelProps = {
   title: string;
   description: string;
-  tooltipKey: BiChartTooltipKey;
+  tooltipKey: BiChartTooltipKey | keyof ResourceSummary | string;
   icon: ReactNode;
   children: ReactNode;
 };

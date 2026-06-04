@@ -4,6 +4,7 @@
 
 import { Bell, CircleUserRound, Search } from "lucide-react";
 
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
@@ -12,7 +13,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
  */
 export const AppHeader = () => {
   return (
-    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/75">
       <SidebarTrigger />
       <div className="min-w-0 flex-1">
         <p className="truncate font-mono text-sm font-medium tracking-tight text-foreground">
@@ -29,6 +30,7 @@ export const AppHeader = () => {
       <Button variant="ghost" size="icon" aria-label="알림 보기">
         <Bell className="size-4" />
       </Button>
+      <ThemeToggle />
       <Button variant="ghost" size="icon" aria-label="사용자 메뉴">
         <CircleUserRound className="size-4" />
       </Button>

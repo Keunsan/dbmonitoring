@@ -429,6 +429,55 @@ export const saveCollectorRunToSupabase = async (result: CollectorRunResult) => 
   return normalized.collectionRun;
 };
 
+/** 세션 스냅샷만 저장합니다(실시간 세션 경량 수집). */
+export const saveSessionsCollectorRunToSupabase = async (result: CollectorRunResult) => {
+  const normalized = normalizeCollectorRun(result);
+
+  await insertInBatches("collection_run", [
+    {
+      id: normalized.collectionRun.id,
+      tenant_id: normalized.collectionRun.tenantId,
+      db_instance_id: normalized.collectionRun.dbInstanceId,
+      started_at: normalized.collectionRun.startedAt,
+      finished_at: normalized.collectionRun.finishedAt,
+      status: normalized.collectionRun.status,
+      error_message: normalized.collectionRun.errorMessage,
+      metrics_count: 0,
+      sessions_count: normalized.collectionRun.sessionsCount,
+      locks_count: 0,
+      sql_count: 0,
+    },
+  ]);
+
+  if (normalized.sessionSnapshots.length > 0) {
+    await insertInBatches(
+      "session_snapshot",
+      normalized.sessionSnapshots.map((session) => ({
+        id: session.id,
+        tenant_id: session.tenantId,
+        db_instance_id: session.dbInstanceId,
+        snapshot_time: session.snapshotTime,
+        session_id: session.sessionId,
+        login_name: session.loginName,
+        status: session.status,
+        wait_type: session.waitType,
+        wait_ms: session.waitMs,
+        sql_id: session.sqlId,
+        blocking_session_id: session.blockingSessionId,
+        command: session.command,
+        cpu_time_ms: session.cpuTimeMs,
+        logical_reads: session.logicalReads,
+        sql_text_masked: session.sqlTextMasked,
+        host_name: session.hostName,
+        program_name: session.programName,
+        database_name: session.databaseName,
+      })),
+    );
+  }
+
+  return normalized.collectionRun;
+};
+
 export const listCollectionRunsFromSupabase = async (
   dbInstanceId?: DbInstanceId,
 ): Promise<CollectionRunRecord[]> => {

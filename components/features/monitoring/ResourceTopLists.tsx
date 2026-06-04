@@ -62,7 +62,7 @@ const TopList = ({
 
   return (
     <Card className="border border-border shadow-sm">
-      <CardHeader className="monitoring-panel-header rounded-t-xl pb-1.5">
+      <CardHeader className="pb-1.5">
         <CardTitle className="text-base">
           <MetricInfoTooltip tooltipKey={tooltipKey}>{title}</MetricInfoTooltip>
         </CardTitle>

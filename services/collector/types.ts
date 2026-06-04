@@ -8,6 +8,9 @@ export type ConnectionTestResult = {
   latencyMs?: number;
 };
 
+/** 수동·스케줄 수집 범위입니다. */
+export type CollectorRunScope = "full" | "sessions";
+
 export type CollectorContext = {
   dbInstanceId: DbInstanceId;
   dbmsType: DbmsType;
@@ -18,6 +21,12 @@ export type CollectorContext = {
   serviceName: string | null;
   databaseName: string | null;
   envType: string;
+  /** sessions일 때 어댑터가 세션 전용 경량 쿼리를 실행합니다. */
+  runScope?: CollectorRunScope;
+};
+
+export type CollectorRunOptions = {
+  scope?: CollectorRunScope;
 };
 
 /** DBMS별 수집 어댑터 공통 인터페이스 */

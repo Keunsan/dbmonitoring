@@ -48,40 +48,49 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* 라이트 폴백(비포털 페이지 등) */
+/* 화이트 테마 — 저채도 뉴트럴 + 인디고 포인트 */
 :root {
-  --background: oklch(0.984 0.003 247.858);
-  --foreground: oklch(0.208 0.042 265.755);
+  --background: oklch(0.994 0.002 260);
+  --foreground: oklch(0.19 0.018 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.19 0.018 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.208 0.042 265.755);
-  --primary: oklch(0.546 0.245 262.881);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.279 0.041 260.031);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.715 0.143 215.221);
-  --accent-foreground: oklch(0.129 0.042 264.695);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.546 0.245 262.881);
-  --chart-1: oklch(0.546 0.245 262.881);
-  --chart-2: oklch(0.715 0.143 215.221);
-  --chart-3: oklch(0.627 0.194 149.214);
-  --chart-4: oklch(0.769 0.188 70.08);
-  --chart-5: oklch(0.577 0.245 27.325);
-  --radius: 0.75rem;
-  --sidebar: oklch(0.129 0.042 264.695);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.715 0.143 215.221);
+  --popover-foreground: oklch(0.19 0.018 260);
+  --primary: oklch(0.42 0.12 264);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.975 0.003 260);
+  --secondary-foreground: oklch(0.32 0.02 260);
+  --muted: oklch(0.965 0.004 260);
+  --muted-foreground: oklch(0.5 0.02 260);
+  --accent: oklch(0.96 0.01 264);
+  --accent-foreground: oklch(0.28 0.04 264);
+  --destructive: oklch(0.53 0.19 25);
+  --border: oklch(0.91 0.006 260);
+  --input: oklch(0.94 0.005 260);
+  --ring: oklch(0.55 0.1 264);
+  --chart-1: oklch(0.42 0.12 264);
+  --chart-2: oklch(0.5 0.11 220);
+  --chart-3: oklch(0.48 0.12 155);
+  --chart-4: oklch(0.55 0.1 75);
+  --chart-5: oklch(0.53 0.19 25);
+  --chart-series-cpu: oklch(0.5 0.14 250);
+  --chart-series-memory: oklch(0.55 0.13 55);
+  --chart-series-qps: oklch(0.44 0.12 264);
+  --chart-series-tps: oklch(0.48 0.12 155);
+  --chart-series-read-latency: oklch(0.5 0.14 220);
+  --chart-series-write-latency: oklch(0.55 0.13 35);
+  --chart-series-session-idle: oklch(0.88 0.01 260);
+  --chart-series-session-active: oklch(0.44 0.12 264);
+  --radius: 0.625rem;
+  --portal-canvas: oklch(0.982 0.003 260);
+  --sidebar: oklch(0.992 0.002 260);
+  --sidebar-foreground: oklch(0.38 0.02 260);
+  --sidebar-primary: oklch(0.42 0.12 264);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.96 0.006 260);
+  --sidebar-accent-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.93 0.005 260);
+  --sidebar-ring: oklch(0.55 0.1 264);
 }
 
 /* AI / dev-console 다크 테마 (포털 기본) */
@@ -109,6 +118,15 @@
   --chart-3: oklch(0.75 0.16 165);
   --chart-4: oklch(0.8 0.14 85);
   --chart-5: oklch(0.65 0.2 25);
+  --chart-series-cpu: oklch(0.78 0.17 195);
+  --chart-series-memory: oklch(0.82 0.17 55);
+  --chart-series-qps: oklch(0.72 0.2 285);
+  --chart-series-tps: oklch(0.76 0.19 145);
+  --chart-series-read-latency: oklch(0.78 0.17 195);
+  --chart-series-write-latency: oklch(0.82 0.17 55);
+  --chart-series-session-idle: oklch(0.32 0.025 285);
+  --chart-series-session-active: oklch(0.76 0.19 145);
+  --portal-canvas: oklch(0.135 0.028 285);
   --sidebar: oklch(0.09 0.035 285);
   --sidebar-foreground: oklch(0.94 0.01 285);
   --sidebar-primary: oklch(0.72 0.19 285);
@@ -129,6 +147,10 @@
   html {
     @apply font-sans;
   }
+  html.light {
+    color-scheme: light;
+  }
+
   html.dark {
     color-scheme: dark;
   }
@@ -153,6 +175,16 @@
 @layer utilities {
   .portal-surface {
     background-color: var(--background);
+    background-image: linear-gradient(
+      180deg,
+      oklch(1 0 0) 0%,
+      oklch(0.99 0.002 260) 48%,
+      var(--background) 100%
+    );
+  }
+
+  .dark .portal-surface {
+    background-color: var(--background);
     background-image:
       radial-gradient(
         ellipse 90% 55% at 50% -15%,
@@ -161,57 +193,19 @@
       ),
       linear-gradient(to right, oklch(1 0 0 / 2.5%) 1px, transparent 1px),
       linear-gradient(to bottom, oklch(1 0 0 / 2.5%) 1px, transparent 1px);
-    background-size:
-      100% 100%,
-      24px 24px,
-      24px 24px;
   }
 
-  /* 포털 본문 스크롤 영역 — 카드(0.16)와 메인 배경(0.12) 사이 레이어 */
+  /* 포털 본문 스크롤 영역 */
   .portal-content-canvas {
-    background-color: oklch(0.965 0.006 247.896);
+    background-color: var(--portal-canvas);
   }
 
-  .dark .portal-content-canvas {
-    background-color: oklch(0.135 0.028 285);
-  }
-
-  /* 모니터링 인스턴스 카드 헤더 — secondary 톤 + DBMS 악센트 그라데이션 */
-  .instance-card-header {
-    border-bottom: 1px solid oklch(1 0 0 / 10%);
-    background-color: var(--secondary);
-    background-image: linear-gradient(
-      135deg,
-      var(--instance-header-accent, transparent) 0%,
-      var(--secondary) 42%,
-      color-mix(in oklch, var(--secondary) 88%, var(--card)) 100%
-    );
-    box-shadow: inset 0 -1px 0 oklch(1 0 0 / 6%);
-  }
-
-  .instance-card-header[data-dbms="MSSQL"] {
-    --instance-header-accent: oklch(0.62 0.18 230 / 18%);
-  }
-
-  .instance-card-header[data-dbms="ORACLE"] {
-    --instance-header-accent: oklch(0.72 0.16 75 / 18%);
-  }
-
-  .instance-card-header[data-dbms="AZURE_SQL"] {
-    --instance-header-accent: oklch(0.62 0.2 300 / 18%);
-  }
-
-  .monitoring-panel-header {
-    border-bottom: 1px solid oklch(1 0 0 / 10%);
-    background-color: var(--secondary);
-    background-image: linear-gradient(
-      to bottom,
-      color-mix(in oklch, var(--secondary) 92%, var(--foreground) 3%),
-      var(--secondary)
-    );
-  }
-
-  .dark .monitoring-panel-header {
-    border-bottom-color: oklch(1 0 0 / 9%);
+  /* 화이트 테마 카드 — 얕은 그림자, 얇은 테두리 */
+  html.light [data-slot="card"] {
+    border-color: var(--border);
+    box-shadow:
+      0 1px 2px oklch(0.2 0.02 260 / 4%),
+      0 0 0 1px oklch(0.2 0.02 260 / 3%);
+    --tw-ring-color: transparent;
   }
 }

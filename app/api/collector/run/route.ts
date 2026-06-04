@@ -22,9 +22,10 @@ export const POST = withApiHandler(async ({ request }) => {
     typeof payload.dbInstanceId === "string" && payload.dbInstanceId.trim()
       ? payload.dbInstanceId.trim()
       : null;
+  const scope = payload.scope === "sessions" ? "sessions" : "full";
 
   const results = dbInstanceId
-    ? [await runCollectorForInstance(dbInstanceId)]
+    ? [await runCollectorForInstance(dbInstanceId, { scope })]
     : await runCollectorOnce();
 
   return {

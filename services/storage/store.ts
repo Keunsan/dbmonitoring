@@ -27,6 +27,7 @@ import {
   listSqlPlanSnapshotsFromMemory,
   listSqlRegressionEventsFromMemory,
   saveCollectorRunToMemory,
+  saveSessionsCollectorRunToMemory,
   saveSqlRegressionEventsToMemory,
 } from "./memory-store";
 import {
@@ -41,6 +42,7 @@ import {
   listSqlPlanSnapshotsFromSupabase,
   listSqlRegressionEventsFromSupabase,
   saveCollectorRunToSupabase,
+  saveSessionsCollectorRunToSupabase,
   saveSqlRegressionEventsToSupabase,
 } from "./supabase-store";
 
@@ -51,6 +53,12 @@ const shouldUseSupabaseStorage = () => isSupabaseMonitoringStorageEnabled();
  */
 export const saveCollectorRun = async (result: CollectorRunResult) =>
   shouldUseSupabaseStorage() ? saveCollectorRunToSupabase(result) : saveCollectorRunToMemory(result);
+
+/** 실시간 세션 경량 수집 결과(세션 스냅샷만)를 저장합니다. */
+export const saveSessionsCollectorRun = async (result: CollectorRunResult) =>
+  shouldUseSupabaseStorage()
+    ? saveSessionsCollectorRunToSupabase(result)
+    : saveSessionsCollectorRunToMemory(result);
 
 /**
  * 최근 Collector 실행 이력을 반환합니다.

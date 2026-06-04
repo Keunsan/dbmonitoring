@@ -11,11 +11,19 @@ export const dynamic = "force-dynamic";
 /**
  * DB 인스턴스별 최신 수집 요약을 반환합니다.
  */
-export const GET = withApiHandler(async () => {
+export const GET = withApiHandler(async ({ request }) => {
   const instances = await listDbInstances();
+  const dbInstanceId = new URL(request.url).searchParams.get("dbInstanceId")?.trim() || null;
+  const targetInstances = dbInstanceId
+    ? instances.filter((instance) => instance.id === dbInstanceId)
+    : instances;
+
+  if (dbInstanceId && targetInstances.length === 0) {
+    throw new Error("요청한 DB 인스턴스를 찾을 수 없습니다.");
+  }
 
   const results = await Promise.allSettled(
-    instances.map(async (instance) => ({
+    targetInstances.map(async (instance) => ({
       instance,
       summary: await getMonitoringSummary(instance.id),
     })),
@@ -26,7 +34,7 @@ export const GET = withApiHandler(async () => {
       return result.value;
     }
 
-    const instance = instances[index];
+    const instance = targetInstances[index];
 
     console.warn("[MONITORING_SUMMARY_INSTANCE_FAILED]", {
       dbInstanceId: instance.id,

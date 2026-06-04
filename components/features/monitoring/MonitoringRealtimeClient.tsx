@@ -8,11 +8,12 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
 
+import { CollectRunButton } from "@/components/features/monitoring/CollectRunButton";
+import { CollectionReferenceBar } from "@/components/features/monitoring/CollectionReferenceBar";
 import { DbResourceCard } from "@/components/features/monitoring/DbResourceCard";
 import { DbStoragePanels } from "@/components/features/monitoring/DbStoragePanels";
 import { MetricInfoTooltip } from "@/components/features/monitoring/MetricInfoTooltip";
@@ -54,6 +55,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type {
+  CollectorRunResult,
+  SessionPayload,
+} from "@/services/collector/types";
 import type { ResourceSummary } from "@/lib/monitoring/resource-summary";
 import { SESSION_TOOLTIP_KEYS } from "@/lib/monitoring/metric-tooltips";
 import type { ApiResponse } from "@/types/api";
@@ -148,7 +153,30 @@ const requestJson = async <T,>(url: string, init?: RequestInit) => {
 const formatNumber = (value: number) =>
   Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
 
-/** 클립보드에 텍스트를 복사하고 결과를 안내합니다. */
+/** Collector 세션 payload를 화면 테이블 모델로 변환합니다. */
+const mapSessionPayloads = (sessions: SessionPayload[]): SessionItem[] =>
+  sessions.map((session) => ({
+    sessionId: session.sessionId,
+    loginName: session.loginName,
+    status: session.status,
+    waitType: session.waitType,
+    waitMs: session.waitMs,
+    sqlId: session.sqlId,
+    blockingSessionId: session.blockingSessionId ?? null,
+    command: session.command ?? null,
+    cpuTimeMs: session.cpuTimeMs ?? null,
+    logicalReads: session.logicalReads ?? null,
+    sqlTextMasked: session.sqlTextMasked ?? null,
+    hostName: session.hostName ?? null,
+    programName: session.programName ?? null,
+    databaseName: session.databaseName ?? null,
+  }));
+
+const COLLECTION_REFERENCE_VARIANTS = new Set<
+  MonitoringRealtimeClientProps["variant"]
+>(["dashboard", "realtime", "sessions"]);
+
+/** 클립보드에 텍스트를 복사하고 짧은 완료 안내를 표시합니다. */
 const copyTextToClipboard = async (text: string, label: string) => {
   if (!text.trim()) {
     toast.error(`${label} 내용이 없어 복사할 수 없습니다.`);
@@ -157,9 +185,9 @@ const copyTextToClipboard = async (text: string, label: string) => {
 
   try {
     await navigator.clipboard.writeText(text);
-    toast.success(`${label}을(를) 클립보드에 복사했습니다.`);
+    toast.success("복사되었습니다.", { duration: 2000 });
   } catch {
-    toast.error(`${label} 복사에 실패했습니다. 브라우저 권한을 확인해주세요.`);
+    toast.error("복사에 실패했습니다. 브라우저 권한을 확인해주세요.");
   }
 };
 
@@ -173,12 +201,9 @@ export const MonitoringRealtimeClient = ({
 }: MonitoringRealtimeClientProps) => {
   const [items, setItems] = useState<SummaryItem[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
-  const initialCollectStartedRef = useRef(false);
 
   const activeInstanceId = selectedId ?? items[0]?.instance.id;
 
@@ -188,11 +213,31 @@ export const MonitoringRealtimeClient = ({
     }
     return items.find((item) => item.instance.id === activeInstanceId) ?? items[0];
   }, [activeInstanceId, items]);
-  const shouldAutoCollect = ["realtime", "sessions", "blocking", "top-sql"].includes(
-    variant,
-  );
 
   const refresh = useCallback(async () => {
+    if (variant === "sessions" && activeInstanceId) {
+      const summaryPayload = await requestJson<{ items: SummaryItem[] }>(
+        `/api/monitoring/summary?dbInstanceId=${encodeURIComponent(activeInstanceId)}`,
+      );
+      const updated = summaryPayload.items[0];
+
+      if (!updated) {
+        return;
+      }
+
+      setItems((previous) => {
+        if (previous.length === 0) {
+          return [updated];
+        }
+
+        return previous.map((item) =>
+          item.instance.id === activeInstanceId ? updated : item,
+        );
+      });
+
+      return;
+    }
+
     const [summaryPayload, alertPayload] = await Promise.all([
       requestJson<{ items: SummaryItem[] }>("/api/monitoring/summary"),
       requestJson<{ items: AlertEvent[] }>("/api/alerts"),
@@ -200,29 +245,60 @@ export const MonitoringRealtimeClient = ({
 
     setItems(summaryPayload.items);
     setAlerts(alertPayload.items);
-  }, []);
-
-  const runCollectorSilently = useCallback(async () => {
-    try {
-      await requestJson("/api/collector/run", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await requestJson("/api/alerts/evaluate", { method: "POST" });
-      await refresh();
-    } catch {
-      // 수집이 이미 진행 중이거나 일시 실패해도 기존 스냅샷으로 화면을 유지합니다.
-    }
-  }, [refresh]);
+  }, [activeInstanceId, variant]);
 
   const collectAndRefresh = useCallback(async () => {
+    if (variant === "sessions" && activeInstanceId) {
+      const runPayload = await requestJson<{ items: CollectorRunResult[] }>(
+        "/api/collector/run",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            dbInstanceId: activeInstanceId,
+            scope: "sessions",
+          }),
+        },
+      );
+
+      const run = runPayload.items[0];
+
+      if (!run || run.status === "FAIL") {
+        throw new Error(run?.errorMessage ?? "세션 수집에 실패했습니다.");
+      }
+
+      setItems((previous) =>
+        previous.map((item) =>
+          item.instance.id === activeInstanceId
+            ? {
+                ...item,
+                summary: {
+                  ...item.summary,
+                  latestSessions: mapSessionPayloads(run.sessions),
+                  lastRun: {
+                    status: run.status,
+                    finishedAt: run.finishedAt,
+                    errorMessage: run.errorMessage,
+                  },
+                },
+              }
+            : item,
+        ),
+      );
+
+      return;
+    }
+
+    const collectSingleInstance = variant === "realtime" && activeInstanceId;
+
     await requestJson("/api/collector/run", {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(
+        collectSingleInstance ? { dbInstanceId: activeInstanceId } : {},
+      ),
     });
     await requestJson("/api/alerts/evaluate", { method: "POST" });
     await refresh();
-  }, [refresh]);
+  }, [activeInstanceId, refresh, variant]);
 
   useEffect(() => {
     let cancelled = false;
@@ -244,13 +320,6 @@ export const MonitoringRealtimeClient = ({
       } finally {
         if (!cancelled) {
           setLoading(false);
-
-          if (shouldAutoCollect && !initialCollectStartedRef.current) {
-            initialCollectStartedRef.current = true;
-            window.setTimeout(() => {
-              void runCollectorSilently();
-            }, 0);
-          }
         }
       }
     };
@@ -261,37 +330,16 @@ export const MonitoringRealtimeClient = ({
       void loadSummary();
     }, 10_000);
 
-    const collectIntervalId = shouldAutoCollect
-      ? window.setInterval(() => {
-          void runCollectorSilently();
-        }, 30_000)
-      : null;
-
     return () => {
       cancelled = true;
       window.clearInterval(refreshIntervalId);
-      if (collectIntervalId) {
-        window.clearInterval(collectIntervalId);
-      }
     };
-  }, [refresh, runCollectorSilently, shouldAutoCollect, variant]);
+  }, [refresh, variant]);
 
-  const runCollector = async () => {
-    setRunning(true);
-    setMessage(null);
+  const handleManualCollect = useCallback(async () => {
     setError(null);
-
-    try {
-      await collectAndRefresh();
-      setMessage("Collector 실행과 임계치 평가가 완료되었습니다.");
-    } catch (runError) {
-      setError(
-        runError instanceof Error ? runError.message : "Collector 실행에 실패했습니다.",
-      );
-    } finally {
-      setRunning(false);
-    }
-  };
+    await collectAndRefresh();
+  }, [collectAndRefresh]);
 
   const dashboardStats = useMemo(() => {
     const ok = items.filter((item) => item.summary.lastRun?.status === "OK").length;
@@ -305,66 +353,54 @@ export const MonitoringRealtimeClient = ({
     };
   }, [alerts, items]);
 
-  /** 대시보드 캔버스·카드 헤더·카드 본문 배경 대비를 런타임에서 기록합니다. */
-  useEffect(() => {
-    if (loading || variant !== "dashboard" || items.length === 0) {
-      return;
-    }
-
-    const frameId = requestAnimationFrame(() => {
-      const canvas = document.querySelector(".portal-content-canvas");
-      const header = document.querySelector(".instance-card-header");
-      const cardBody = document.querySelector(
-        ".instance-card-header + [data-slot='card-content']",
-      );
-      if (!canvas || !header) {
-        return;
-      }
-
-      const canvasBg = getComputedStyle(canvas).backgroundColor;
-      const headerBg = getComputedStyle(header).backgroundColor;
-      const bodyBg = cardBody ? getComputedStyle(cardBody).backgroundColor : null;
-
-      // #region agent log
-      fetch("http://127.0.0.1:7718/ingest/0b6cee79-769d-4ee1-a9e0-bafe5550e42a", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Debug-Session-Id": "821334",
-        },
-        body: JSON.stringify({
-          sessionId: "821334",
-          runId: "post-fix-contrast",
-          hypothesisId: "H1-H2",
-          location: "MonitoringRealtimeClient.tsx:contrastProbe",
-          message: "dashboard surface contrast",
-          data: { canvasBg, headerBg, bodyBg, variant },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
-    });
-
-    return () => cancelAnimationFrame(frameId);
-  }, [loading, variant, items.length]);
+  const showCollectionReference = COLLECTION_REFERENCE_VARIANTS.has(variant);
+  const collectionReferenceMode = variant === "dashboard" ? "dashboard" : "instance";
 
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
         title={title}
         description={description}
+        descriptionBesideTitle={
+          variant === "dashboard" || variant === "realtime" || variant === "sessions"
+        }
         actions={
-          <Button onClick={() => void runCollector()} disabled={running}>
-            {running ? "수집 중" : "실시간 수집 실행"}
-          </Button>
+          <>
+            {(variant === "realtime" || variant === "sessions") &&
+            items.length > 0 &&
+            activeInstanceId ? (
+              <DbInstanceSelect
+                items={items}
+                selectedId={activeInstanceId}
+                onSelectId={setSelectedId}
+              />
+            ) : null}
+            <CollectRunButton
+              onCollect={handleManualCollect}
+              onFailed={(failedMessage) => setError(failedMessage)}
+            />
+          </>
+        }
+        actionsMeta={
+          showCollectionReference ? (
+            <CollectionReferenceBar
+              layout="compact"
+              loading={loading}
+              items={items}
+              mode={collectionReferenceMode}
+              selected={selected}
+            />
+          ) : null
         }
       />
-      <div className="portal-content-canvas min-h-0 flex-1 space-y-3 overflow-y-auto p-4 md:p-5">
-        {message ? (
-          <Alert className="border-emerald-200 bg-emerald-50 text-emerald-700">
-            <AlertDescription className="text-emerald-700">{message}</AlertDescription>
-          </Alert>
-        ) : null}
+      <div
+        className={cn(
+          "portal-content-canvas min-h-0 flex-1 p-4 md:p-5",
+          variant === "sessions"
+            ? "flex flex-col overflow-hidden"
+            : "space-y-3 overflow-y-auto",
+        )}
+      >
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
@@ -382,18 +418,18 @@ export const MonitoringRealtimeClient = ({
             {variant === "dashboard" ? (
               <DashboardResourceView items={items} dashboardStats={dashboardStats} />
             ) : null}
-            {variant === "realtime" && selected && activeInstanceId ? (
-              <RealtimeResourceView
-                item={selected}
-                items={items}
-                selectedId={activeInstanceId}
-                onSelectId={setSelectedId}
-              />
+            {variant === "realtime" && selected ? (
+              <RealtimeResourceView item={selected} />
             ) : null}
             {variant === "alerts" ? (
               <AlertsTable alerts={alerts} />
-            ) : variant === "sessions" ? (
-              <SessionsTable sessions={selected?.summary.latestSessions ?? []} />
+            ) : variant === "sessions" && selected && activeInstanceId ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <SessionsTable
+                  key={activeInstanceId}
+                  sessions={selected.summary.latestSessions ?? []}
+                />
+              </div>
             ) : variant === "blocking" ? (
               <BlockingTable items={[]} count={selected?.summary.blockingCount ?? 0} />
             ) : variant === "deadlocks" ? (
@@ -411,11 +447,27 @@ export const MonitoringRealtimeClient = ({
   );
 };
 
-const StatCard = ({ title, value }: { title: string; value: number }) => (
+const StatCard = ({
+  title,
+  value,
+  tone = "default",
+}: {
+  title: string;
+  value: number;
+  tone?: "default" | "ok" | "fail";
+}) => (
   <Card className="border border-border shadow-sm">
-    <CardHeader className="monitoring-panel-header rounded-t-xl pb-2">
+    <CardHeader className="pb-2">
       <CardDescription>{title}</CardDescription>
-      <CardTitle className="text-2xl">{formatNumber(value)}</CardTitle>
+      <CardTitle
+        className={cn(
+          "text-2xl",
+          tone === "ok" && "text-emerald-700 dark:text-emerald-400",
+          tone === "fail" && "text-red-600 dark:text-red-400",
+        )}
+      >
+        {formatNumber(value)}
+      </CardTitle>
     </CardHeader>
   </Card>
 );
@@ -436,8 +488,8 @@ const DashboardResourceView = ({
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-4">
         <StatCard title="전체 DB" value={dashboardStats.total} />
-        <StatCard title="수집 정상" value={dashboardStats.ok} />
-        <StatCard title="수집 실패" value={dashboardStats.fail} />
+        <StatCard title="수집 정상" value={dashboardStats.ok} tone="ok" />
+        <StatCard title="수집 실패" value={dashboardStats.fail} tone="fail" />
         <StatCard title="미확인 알림" value={dashboardStats.alerts} />
       </div>
       <ResourceTopLists items={resourceItems} />
@@ -468,38 +520,42 @@ const DashboardResourceView = ({
   );
 };
 
-const RealtimeResourceView = ({
-  item,
+/** DB 실시간 현황·세션 화면에서 인스턴스를 선택합니다. */
+const DbInstanceSelect = ({
   items,
   selectedId,
   onSelectId,
 }: {
-  item: SummaryItem;
   items: SummaryItem[];
   selectedId: string;
   onSelectId: (id: string) => void;
-}) => (
+}) => {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-2">
+      <span className="shrink-0 text-xs leading-8 text-foreground/55">DB선택</span>
+      <Select value={selectedId} onValueChange={onSelectId}>
+        <SelectTrigger className="h-8 min-w-[10rem] w-[14rem] text-xs">
+          <SelectValue placeholder="DB 인스턴스 선택" />
+        </SelectTrigger>
+        <SelectContent>
+          {items.map((entry) => (
+            <SelectItem key={entry.instance.id} value={entry.instance.id}>
+              {entry.instance.instanceName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+};
+
+const RealtimeResourceView = ({ item }: { item: SummaryItem }) => (
   <div className="space-y-4">
-    {items.length > 1 ? (
-      <div className="max-w-sm">
-        <Select value={selectedId} onValueChange={onSelectId}>
-          <SelectTrigger>
-            <SelectValue placeholder="DB 인스턴스 선택" />
-          </SelectTrigger>
-          <SelectContent>
-            {items.map((entry) => (
-              <SelectItem key={entry.instance.id} value={entry.instance.id}>
-                {entry.instance.instanceName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-    ) : null}
-    <ResourceOverviewCards
-      title={`${item.instance.instanceName} 서버 상태`}
-      resource={item.summary.resourceSummary}
-    />
+    <ResourceOverviewCards resource={item.summary.resourceSummary} />
     <ThroughputSessionCards resource={item.summary.resourceSummary} />
     <ResourceTrendChart
       key={item.instance.id}
@@ -588,6 +644,13 @@ const sessionColumns: Array<{
   },
 ];
 
+/** 뷰포트 너비에 맞추며 SQL 열이 남은 공간을 차지합니다. minmax(0,…)로 가로 스크롤을 방지합니다. */
+const SESSION_TABLE_GRID_CLASS =
+  "grid w-full grid-cols-[minmax(0,4.5rem)_minmax(0,6.25rem)_minmax(0,4.5rem)_minmax(0,5.5rem)_minmax(0,3.5rem)_minmax(0,4.5rem)_minmax(0,4.5rem)_minmax(0,7.5rem)_minmax(0,1fr)]";
+
+/** 그리드 셀 내용이 열 너비를 넘지 않도록 합니다. */
+const sessionTableCellClass = "min-w-0 overflow-hidden px-2 py-1.5 text-xs";
+
 const getSessionSortValue = (session: SessionItem, key: SessionSortKey) => {
   const value = session[key];
 
@@ -632,70 +695,90 @@ const SessionsTable = ({ sessions }: { sessions: SessionItem[] }) => {
   };
 
   return (
-    <>
-      <Card>
-        <CardHeader>
-          <CardTitle>실시간 세션</CardTitle>
-          <CardDescription>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <CardHeader className="shrink-0 pb-2">
+          <CardDescription className="text-xs">
             시스템 세션은 SQL Server 기준으로 `is_user_process = 1` 및 세션 ID 50 초과만
             수집해 제외합니다. 행을 클릭하면 세션 상세와 SQL 전문을 확인·복사할 수 있습니다.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {sortedSessions.length === 0 ? (
             <EmptyState title="수집된 세션이 없습니다" />
           ) : (
-            <div className="max-h-[calc(100svh-16rem)] overflow-auto">
-              <div className="min-w-[1180px] rounded-lg border">
-                <div className="sticky top-0 z-10 grid grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b bg-muted/95 text-xs font-medium text-muted-foreground backdrop-blur">
-                  {sessionColumns.map((column) => (
-                    <button
-                      key={column.key}
-                      type="button"
-                      className="px-3 py-2 text-left hover:text-foreground"
-                      onClick={() => toggleSort(column.key)}
-                    >
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
+              <div
+                className={cn(
+                  "shrink-0 border-b bg-secondary/80 text-xs font-medium text-muted-foreground",
+                  SESSION_TABLE_GRID_CLASS,
+                )}
+                role="rowgroup"
+              >
+                {sessionColumns.map((column) => (
+                  <button
+                    key={column.key}
+                    type="button"
+                    className={cn(sessionTableCellClass, "text-left hover:text-foreground")}
+                    onClick={() => toggleSort(column.key)}
+                  >
+                    <span className="block truncate">
                       <MetricInfoTooltip tooltipKey={column.tooltipKey}>
                         {column.label}
                       </MetricInfoTooltip>
                       {sortKey === column.key ? (sortDirection === "asc" ? " ▲" : " ▼") : ""}
-                    </button>
-                  ))}
-                  <div className="px-3 py-2">
-                    <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.programDatabase}>
-                      프로그램/DB
-                    </MetricInfoTooltip>
-                  </div>
-                  <div className="px-3 py-2">
-                    <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.sqlText}>
-                      실행 SQL Text
-                    </MetricInfoTooltip>
-                  </div>
+                    </span>
+                  </button>
+                ))}
+                <div className={sessionTableCellClass}>
+                  <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.programDatabase}>
+                    프로그램/DB
+                  </MetricInfoTooltip>
                 </div>
+                <div className={sessionTableCellClass}>
+                  <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.sqlText}>
+                    실행 SQL Text
+                  </MetricInfoTooltip>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
                 {sortedSessions.map((session) => (
                   <button
                     key={`${session.sessionId}-${session.sqlId}-${session.command ?? ""}`}
                     type="button"
                     title="클릭하여 세션 상세 및 SQL 전문 보기"
                     aria-label={`세션 ${session.sessionId} 상세 보기`}
-                    className="grid w-full cursor-pointer grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b text-left text-sm transition-colors last:border-b-0 hover:bg-primary/12 active:bg-primary/18 focus-visible:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                    className={cn(
+                      "w-full min-w-0 cursor-pointer border-b text-left text-xs transition-colors last:border-b-0 hover:bg-primary/12 active:bg-primary/18 focus-visible:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30",
+                      SESSION_TABLE_GRID_CLASS,
+                    )}
                     onClick={() => setSelectedSession(session)}
                   >
-                    <div className="px-3 py-2 font-medium">{session.sessionId}</div>
-                    <div className="px-3 py-2" title={session.loginName}>
+                    <div className={cn(sessionTableCellClass, "font-medium")}>
+                      {session.sessionId}
+                    </div>
+                    <div className={cn(sessionTableCellClass, "truncate")} title={session.loginName}>
                       {session.loginName}
                     </div>
-                    <div className="px-3 py-2">{session.status}</div>
-                    <div className="px-3 py-2">
-                      <div title={session.waitType ?? undefined}>{session.waitType ?? "-"}</div>
+                    <div className={cn(sessionTableCellClass, "truncate")}>{session.status}</div>
+                    <div className={sessionTableCellClass}>
+                      <div className="truncate" title={session.waitType ?? undefined}>
+                        {session.waitType ?? "-"}
+                      </div>
                       <div className="text-muted-foreground text-xs">
                         {session.waitMs ?? 0}ms
                       </div>
                     </div>
-                    <div className="px-3 py-2">{session.blockingSessionId ?? "-"}</div>
-                    <div className="px-3 py-2">{formatNumber(session.cpuTimeMs ?? 0)}</div>
-                    <div className="px-3 py-2">{formatNumber(session.logicalReads ?? 0)}</div>
-                    <div className="px-3 py-2">
+                    <div className={cn(sessionTableCellClass, "truncate")}>
+                      {session.blockingSessionId ?? "-"}
+                    </div>
+                    <div className={cn(sessionTableCellClass, "tabular-nums")}>
+                      {formatNumber(session.cpuTimeMs ?? 0)}
+                    </div>
+                    <div className={cn(sessionTableCellClass, "tabular-nums")}>
+                      {formatNumber(session.logicalReads ?? 0)}
+                    </div>
+                    <div className={sessionTableCellClass}>
                       <div className="truncate" title={session.programName ?? undefined}>
                         {session.programName ?? "-"}
                       </div>
@@ -706,12 +789,15 @@ const SessionsTable = ({ sessions }: { sessions: SessionItem[] }) => {
                         {session.databaseName ?? "-"} / {session.hostName ?? "-"}
                       </div>
                     </div>
-                    <div className="px-3 py-2">
-                      <div className="text-muted-foreground text-xs">
+                    <div className={sessionTableCellClass}>
+                      <div
+                        className="truncate text-muted-foreground text-xs"
+                        title={`${session.command ?? "-"} / ${session.sqlId ?? "-"}`}
+                      >
                         {session.command ?? "-"} / {session.sqlId ?? "-"}
                       </div>
                       <div
-                        className="line-clamp-2 font-mono text-xs"
+                        className="line-clamp-2 break-all font-mono text-xs"
                         title={session.sqlTextMasked ?? undefined}
                       >
                         {session.sqlTextMasked || "-"}
@@ -734,7 +820,7 @@ const SessionsTable = ({ sessions }: { sessions: SessionItem[] }) => {
           }
         }}
       />
-    </>
+    </div>
   );
 };
 

@@ -19,6 +19,7 @@ export const PORTAL_NAV_GROUPS: PortalNavGroup[] = [
     items: [
       { label: "통합 현황", href: "/dashboard", mvp: true },
       { label: "통합 현황_v1", href: "/dashboard/v1", mvp: true },
+      { label: "통합 현황_v2", href: "/dashboard/v2", mvp: true },
       { label: "업무 시스템별 현황", href: "/dashboard/by-business", mvp: false },
     ],
   },
