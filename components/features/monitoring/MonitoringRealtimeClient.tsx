@@ -3,6 +3,7 @@
 /** 실시간 모니터링 화면에서 Collector 실행과 polling 조회를 제공하는 클라이언트 컴포넌트입니다. */
 
 import Link from "next/link";
+import { Copy } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -39,6 +40,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
   Table,
   TableBody,
   TableCell,
@@ -50,6 +58,8 @@ import type { ResourceSummary } from "@/lib/monitoring/resource-summary";
 import { SESSION_TOOLTIP_KEYS } from "@/lib/monitoring/metric-tooltips";
 import type { ApiResponse } from "@/types/api";
 import type { AlertEvent, DbInstance } from "@/types/entities";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type MetricItem = {
   id: string;
@@ -137,6 +147,21 @@ const requestJson = async <T,>(url: string, init?: RequestInit) => {
 
 const formatNumber = (value: number) =>
   Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
+
+/** 클립보드에 텍스트를 복사하고 결과를 안내합니다. */
+const copyTextToClipboard = async (text: string, label: string) => {
+  if (!text.trim()) {
+    toast.error(`${label} 내용이 없어 복사할 수 없습니다.`);
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    toast.success(`${label}을(를) 클립보드에 복사했습니다.`);
+  } catch {
+    toast.error(`${label} 복사에 실패했습니다. 브라우저 권한을 확인해주세요.`);
+  }
+};
 
 /**
  * 최신 수집 요약과 알림을 주기적으로 조회합니다.
@@ -280,6 +305,49 @@ export const MonitoringRealtimeClient = ({
     };
   }, [alerts, items]);
 
+  /** 대시보드 캔버스·카드 헤더·카드 본문 배경 대비를 런타임에서 기록합니다. */
+  useEffect(() => {
+    if (loading || variant !== "dashboard" || items.length === 0) {
+      return;
+    }
+
+    const frameId = requestAnimationFrame(() => {
+      const canvas = document.querySelector(".portal-content-canvas");
+      const header = document.querySelector(".instance-card-header");
+      const cardBody = document.querySelector(
+        ".instance-card-header + [data-slot='card-content']",
+      );
+      if (!canvas || !header) {
+        return;
+      }
+
+      const canvasBg = getComputedStyle(canvas).backgroundColor;
+      const headerBg = getComputedStyle(header).backgroundColor;
+      const bodyBg = cardBody ? getComputedStyle(cardBody).backgroundColor : null;
+
+      // #region agent log
+      fetch("http://127.0.0.1:7718/ingest/0b6cee79-769d-4ee1-a9e0-bafe5550e42a", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Debug-Session-Id": "821334",
+        },
+        body: JSON.stringify({
+          sessionId: "821334",
+          runId: "post-fix-contrast",
+          hypothesisId: "H1-H2",
+          location: "MonitoringRealtimeClient.tsx:contrastProbe",
+          message: "dashboard surface contrast",
+          data: { canvasBg, headerBg, bodyBg, variant },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {});
+      // #endregion
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [loading, variant, items.length]);
+
   return (
     <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
@@ -291,7 +359,7 @@ export const MonitoringRealtimeClient = ({
           </Button>
         }
       />
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+      <div className="portal-content-canvas min-h-0 flex-1 space-y-3 overflow-y-auto p-4 md:p-5">
         {message ? (
           <Alert className="border-emerald-200 bg-emerald-50 text-emerald-700">
             <AlertDescription className="text-emerald-700">{message}</AlertDescription>
@@ -344,8 +412,8 @@ export const MonitoringRealtimeClient = ({
 };
 
 const StatCard = ({ title, value }: { title: string; value: number }) => (
-  <Card>
-    <CardHeader className="pb-2">
+  <Card className="border border-border shadow-sm">
+    <CardHeader className="monitoring-panel-header rounded-t-xl pb-2">
       <CardDescription>{title}</CardDescription>
       <CardTitle className="text-2xl">{formatNumber(value)}</CardTitle>
     </CardHeader>
@@ -375,7 +443,7 @@ const DashboardResourceView = ({
       <ResourceTopLists items={resourceItems} />
       <section className="space-y-2">
         <h3 className="text-sm font-medium">DB별 서버 리소스 현황</h3>
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           {items.map((item) => (
             <DbResourceCard
               key={item.instance.id}
@@ -537,6 +605,7 @@ const getSessionSortValue = (session: SessionItem, key: SessionSortKey) => {
 const SessionsTable = ({ sessions }: { sessions: SessionItem[] }) => {
   const [sortKey, setSortKey] = useState<SessionSortKey>("cpuTimeMs");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [selectedSession, setSelectedSession] = useState<SessionItem | null>(null);
 
   const sortedSessions = useMemo(() => {
     return [...sessions].sort((a, b) => {
@@ -563,85 +632,250 @@ const SessionsTable = ({ sessions }: { sessions: SessionItem[] }) => {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>실시간 세션</CardTitle>
-        <CardDescription>
-          시스템 세션은 SQL Server 기준으로 `is_user_process = 1` 및 세션 ID 50 초과만
-          수집해 제외합니다.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {sortedSessions.length === 0 ? (
-          <EmptyState title="수집된 세션이 없습니다" />
-        ) : (
-          <div className="max-h-[calc(100svh-16rem)] overflow-auto">
-            <div className="min-w-[1180px] rounded-lg border">
-              <div className="sticky top-0 z-10 grid grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b bg-muted/95 text-xs font-medium text-muted-foreground backdrop-blur">
-                {sessionColumns.map((column) => (
-                  <button
-                    key={column.key}
-                    type="button"
-                    className="px-3 py-2 text-left hover:text-foreground"
-                    onClick={() => toggleSort(column.key)}
-                  >
-                    <MetricInfoTooltip tooltipKey={column.tooltipKey}>
-                      {column.label}
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>실시간 세션</CardTitle>
+          <CardDescription>
+            시스템 세션은 SQL Server 기준으로 `is_user_process = 1` 및 세션 ID 50 초과만
+            수집해 제외합니다. 행을 클릭하면 세션 상세와 SQL 전문을 확인·복사할 수 있습니다.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sortedSessions.length === 0 ? (
+            <EmptyState title="수집된 세션이 없습니다" />
+          ) : (
+            <div className="max-h-[calc(100svh-16rem)] overflow-auto">
+              <div className="min-w-[1180px] rounded-lg border">
+                <div className="sticky top-0 z-10 grid grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b bg-muted/95 text-xs font-medium text-muted-foreground backdrop-blur">
+                  {sessionColumns.map((column) => (
+                    <button
+                      key={column.key}
+                      type="button"
+                      className="px-3 py-2 text-left hover:text-foreground"
+                      onClick={() => toggleSort(column.key)}
+                    >
+                      <MetricInfoTooltip tooltipKey={column.tooltipKey}>
+                        {column.label}
+                      </MetricInfoTooltip>
+                      {sortKey === column.key ? (sortDirection === "asc" ? " ▲" : " ▼") : ""}
+                    </button>
+                  ))}
+                  <div className="px-3 py-2">
+                    <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.programDatabase}>
+                      프로그램/DB
                     </MetricInfoTooltip>
-                    {sortKey === column.key ? (sortDirection === "asc" ? " ▲" : " ▼") : ""}
+                  </div>
+                  <div className="px-3 py-2">
+                    <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.sqlText}>
+                      실행 SQL Text
+                    </MetricInfoTooltip>
+                  </div>
+                </div>
+                {sortedSessions.map((session) => (
+                  <button
+                    key={`${session.sessionId}-${session.sqlId}-${session.command ?? ""}`}
+                    type="button"
+                    title="클릭하여 세션 상세 및 SQL 전문 보기"
+                    aria-label={`세션 ${session.sessionId} 상세 보기`}
+                    className="grid w-full cursor-pointer grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b text-left text-sm transition-colors last:border-b-0 hover:bg-primary/12 active:bg-primary/18 focus-visible:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/30"
+                    onClick={() => setSelectedSession(session)}
+                  >
+                    <div className="px-3 py-2 font-medium">{session.sessionId}</div>
+                    <div className="px-3 py-2" title={session.loginName}>
+                      {session.loginName}
+                    </div>
+                    <div className="px-3 py-2">{session.status}</div>
+                    <div className="px-3 py-2">
+                      <div title={session.waitType ?? undefined}>{session.waitType ?? "-"}</div>
+                      <div className="text-muted-foreground text-xs">
+                        {session.waitMs ?? 0}ms
+                      </div>
+                    </div>
+                    <div className="px-3 py-2">{session.blockingSessionId ?? "-"}</div>
+                    <div className="px-3 py-2">{formatNumber(session.cpuTimeMs ?? 0)}</div>
+                    <div className="px-3 py-2">{formatNumber(session.logicalReads ?? 0)}</div>
+                    <div className="px-3 py-2">
+                      <div className="truncate" title={session.programName ?? undefined}>
+                        {session.programName ?? "-"}
+                      </div>
+                      <div
+                        className="text-muted-foreground truncate text-xs"
+                        title={`${session.databaseName ?? "-"} / ${session.hostName ?? "-"}`}
+                      >
+                        {session.databaseName ?? "-"} / {session.hostName ?? "-"}
+                      </div>
+                    </div>
+                    <div className="px-3 py-2">
+                      <div className="text-muted-foreground text-xs">
+                        {session.command ?? "-"} / {session.sqlId ?? "-"}
+                      </div>
+                      <div
+                        className="line-clamp-2 font-mono text-xs"
+                        title={session.sqlTextMasked ?? undefined}
+                      >
+                        {session.sqlTextMasked || "-"}
+                      </div>
+                    </div>
                   </button>
                 ))}
-                <div className="px-3 py-2">
-                  <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.programDatabase}>
-                    프로그램/DB
-                  </MetricInfoTooltip>
-                </div>
-                <div className="px-3 py-2">
-                  <MetricInfoTooltip tooltipKey={SESSION_TOOLTIP_KEYS.sqlText}>
-                    실행 SQL Text
-                  </MetricInfoTooltip>
-                </div>
               </div>
-              {sortedSessions.map((session) => (
-                <div
-                  key={`${session.sessionId}-${session.sqlId}-${session.command ?? ""}`}
-                  className="grid grid-cols-[90px_150px_110px_120px_90px_100px_100px_180px_minmax(280px,1fr)] border-b text-sm last:border-b-0"
-                >
-                  <div className="px-3 py-2 font-medium">{session.sessionId}</div>
-                  <div className="px-3 py-2">{session.loginName}</div>
-                  <div className="px-3 py-2">{session.status}</div>
-                  <div className="px-3 py-2">
-                    <div>{session.waitType ?? "-"}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {session.waitMs ?? 0}ms
-                    </div>
-                  </div>
-                  <div className="px-3 py-2">{session.blockingSessionId ?? "-"}</div>
-                  <div className="px-3 py-2">{formatNumber(session.cpuTimeMs ?? 0)}</div>
-                  <div className="px-3 py-2">{formatNumber(session.logicalReads ?? 0)}</div>
-                  <div className="px-3 py-2">
-                    <div className="truncate">{session.programName ?? "-"}</div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {session.databaseName ?? "-"} / {session.hostName ?? "-"}
-                    </div>
-                  </div>
-                  <div className="px-3 py-2">
-                    <div className="text-muted-foreground text-xs">
-                      {session.command ?? "-"} / {session.sqlId ?? "-"}
-                    </div>
-                    <div className="line-clamp-2 font-mono text-xs">
-                      {session.sqlTextMasked || "-"}
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+          )}
+        </CardContent>
+      </Card>
+
+      <SessionDetailSheet
+        session={selectedSession}
+        open={selectedSession !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedSession(null);
+          }
+        }}
+      />
+    </>
   );
 };
+
+type SessionDetailSheetProps = {
+  session: SessionItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+/** 세션 상세와 SQL 전문 복사를 제공하는 시트입니다. */
+const SessionDetailSheet = ({ session, open, onOpenChange }: SessionDetailSheetProps) => {
+  const sqlText = session?.sqlTextMasked?.trim() ?? "";
+  const sessionSummaryText = session
+    ? [
+        `세션 ID: ${session.sessionId}`,
+        `계정: ${session.loginName}`,
+        `상태: ${session.status}`,
+        `대기 유형: ${session.waitType ?? "-"}`,
+        `대기(ms): ${session.waitMs ?? "-"}`,
+        `Blocking: ${session.blockingSessionId ?? "-"}`,
+        `CPU(ms): ${session.cpuTimeMs ?? "-"}`,
+        `Logical Reads: ${session.logicalReads ?? "-"}`,
+        `Command: ${session.command ?? "-"}`,
+        `SQL ID: ${session.sqlId ?? "-"}`,
+        `프로그램: ${session.programName ?? "-"}`,
+        `데이터베이스: ${session.databaseName ?? "-"}`,
+        `호스트: ${session.hostName ?? "-"}`,
+        "",
+        "--- SQL Text ---",
+        sqlText || "(없음)",
+      ].join("\n")
+    : "";
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col sm:max-w-3xl">
+        {session ? (
+          <>
+            <SheetHeader className="border-b border-border/60 pb-4">
+              <SheetTitle>세션 상세 · {session.sessionId}</SheetTitle>
+              <SheetDescription>
+                실행 SQL 전문과 수집 필드 원문을 확인하고 복사할 수 있습니다.
+              </SheetDescription>
+            </SheetHeader>
+
+            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <SessionDetailField label="세션 ID" value={session.sessionId} />
+                <SessionDetailField label="계정" value={session.loginName} />
+                <SessionDetailField label="상태" value={session.status} />
+                <SessionDetailField label="대기 유형" value={session.waitType} />
+                <SessionDetailField
+                  label="대기(ms)"
+                  value={session.waitMs !== null ? String(session.waitMs) : null}
+                />
+                <SessionDetailField label="Blocking 세션" value={session.blockingSessionId} />
+                <SessionDetailField
+                  label="CPU(ms)"
+                  value={session.cpuTimeMs !== null ? String(session.cpuTimeMs) : null}
+                />
+                <SessionDetailField
+                  label="Logical Reads"
+                  value={session.logicalReads !== null ? String(session.logicalReads) : null}
+                />
+                <SessionDetailField label="Command" value={session.command} />
+                <SessionDetailField label="SQL ID" value={session.sqlId} mono />
+                <SessionDetailField
+                  label="프로그램"
+                  value={session.programName}
+                  className="sm:col-span-2"
+                />
+                <SessionDetailField label="데이터베이스" value={session.databaseName} />
+                <SessionDetailField label="호스트" value={session.hostName} />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-medium">실행 SQL Text</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyTextToClipboard(sqlText, "SQL Text")}
+                      disabled={!sqlText}
+                    >
+                      <Copy className="size-3.5" />
+                      SQL 복사
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        void copyTextToClipboard(sessionSummaryText, "세션 상세")
+                      }
+                    >
+                      <Copy className="size-3.5" />
+                      전체 복사
+                    </Button>
+                  </div>
+                </div>
+                <pre className="max-h-[min(50vh,480px)] overflow-auto rounded-lg border border-border/60 bg-muted/30 p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
+                  {sqlText || "(수집된 SQL Text가 없습니다)"}
+                </pre>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  );
+};
+
+type SessionDetailFieldProps = {
+  label: string;
+  value: string | null | undefined;
+  mono?: boolean;
+  className?: string;
+};
+
+/** 세션 상세 필드 한 줄을 표시합니다. */
+const SessionDetailField = ({
+  label,
+  value,
+  mono = false,
+  className,
+}: SessionDetailFieldProps) => (
+  <div className={cn("space-y-1", className)}>
+    <p className="text-muted-foreground text-xs">{label}</p>
+    <p
+      className={cn(
+        "break-all text-sm",
+        mono && "font-mono text-xs",
+        !value && "text-muted-foreground",
+      )}
+    >
+      {value?.trim() ? value : "-"}
+    </p>
+  </div>
+);
 
 const SqlTable = ({
   sql,

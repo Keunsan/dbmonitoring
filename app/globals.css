@@ -132,6 +132,22 @@
   html.dark {
     color-scheme: dark;
   }
+
+  /* 클릭 가능한 요소에 손가락 커서를 통일합니다. */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href],
+  label[for],
+  summary,
+  [data-slot="select-trigger"]:not(:disabled),
+  [data-slot="sidebar-menu-button"]:not(:disabled),
+  [data-sidebar="menu-button"]:not(:disabled),
+  [data-slot="tabs-trigger"]:not(:disabled),
+  [data-slot="dropdown-menu-item"]:not([data-disabled]),
+  [data-slot="select-item"]:not([data-disabled]),
+  [data-slot="command-item"]:not([data-disabled="true"]) {
+    cursor: pointer;
+  }
 }
 
 @layer utilities {
@@ -149,5 +165,53 @@
       100% 100%,
       24px 24px,
       24px 24px;
+  }
+
+  /* 포털 본문 스크롤 영역 — 카드(0.16)와 메인 배경(0.12) 사이 레이어 */
+  .portal-content-canvas {
+    background-color: oklch(0.965 0.006 247.896);
+  }
+
+  .dark .portal-content-canvas {
+    background-color: oklch(0.135 0.028 285);
+  }
+
+  /* 모니터링 인스턴스 카드 헤더 — secondary 톤 + DBMS 악센트 그라데이션 */
+  .instance-card-header {
+    border-bottom: 1px solid oklch(1 0 0 / 10%);
+    background-color: var(--secondary);
+    background-image: linear-gradient(
+      135deg,
+      var(--instance-header-accent, transparent) 0%,
+      var(--secondary) 42%,
+      color-mix(in oklch, var(--secondary) 88%, var(--card)) 100%
+    );
+    box-shadow: inset 0 -1px 0 oklch(1 0 0 / 6%);
+  }
+
+  .instance-card-header[data-dbms="MSSQL"] {
+    --instance-header-accent: oklch(0.62 0.18 230 / 18%);
+  }
+
+  .instance-card-header[data-dbms="ORACLE"] {
+    --instance-header-accent: oklch(0.72 0.16 75 / 18%);
+  }
+
+  .instance-card-header[data-dbms="AZURE_SQL"] {
+    --instance-header-accent: oklch(0.62 0.2 300 / 18%);
+  }
+
+  .monitoring-panel-header {
+    border-bottom: 1px solid oklch(1 0 0 / 10%);
+    background-color: var(--secondary);
+    background-image: linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--secondary) 92%, var(--foreground) 3%),
+      var(--secondary)
+    );
+  }
+
+  .dark .monitoring-panel-header {
+    border-bottom-color: oklch(1 0 0 / 9%);
   }
 }

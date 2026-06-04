@@ -24,6 +24,30 @@ export const SESSION_TOOLTIP_KEYS = {
 export type SessionTooltipKey =
   (typeof SESSION_TOOLTIP_KEYS)[keyof typeof SESSION_TOOLTIP_KEYS];
 
+/** 대시보드 Top N 카드 제목 툴팁 키입니다. */
+export const TOP_LIST_TOOLTIP_KEYS = {
+  cpu: "dashboard.top_list.cpu",
+  memory: "dashboard.top_list.memory",
+  diskLatency: "dashboard.top_list.disk_latency",
+  log: "dashboard.top_list.log",
+} as const;
+
+export type TopListTooltipKey =
+  (typeof TOP_LIST_TOOLTIP_KEYS)[keyof typeof TOP_LIST_TOOLTIP_KEYS];
+
+/** 통합 현황_v1 BI 차트 제목 툴팁 키입니다. */
+export const BI_CHART_TOOLTIP_KEYS = {
+  mdfUsage: "dashboard.bi.mdf_usage",
+  ldfUsage: "dashboard.bi.ldf_usage",
+  cpuMemory: "dashboard.bi.cpu_memory",
+  diskIo: "dashboard.bi.disk_io",
+  qpsTps: "dashboard.bi.qps_tps",
+  sessionsByInstance: "dashboard.bi.sessions_by_instance",
+} as const;
+
+export type BiChartTooltipKey =
+  (typeof BI_CHART_TOOLTIP_KEYS)[keyof typeof BI_CHART_TOOLTIP_KEYS];
+
 export const resourceMetricNameBySummaryKey: Partial<
   Record<keyof ResourceSummary, string>
 > = {
@@ -277,6 +301,86 @@ export const metricTooltipContent: Record<string, MetricTooltipContent> = {
       "is_user_process = 1, session_id > 50 조건의 running 세션 수 / 전체 세션 수입니다.",
     interpretation:
       "동시 접속 부하를 볼 때 사용합니다. 활성 세션이 전체 대비 급증하면 장시간 실행 SQL을 확인합니다.",
+  },
+  "dashboard.top_list.cpu": {
+    definition:
+      "등록된 DB 인스턴스 중 현재 CPU 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
+    formula:
+      "각 인스턴스 최신 수집값의 CPU 사용률(%)을 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+    interpretation:
+      "목록 상단일수록 CPU 부하가 큰 DB입니다. 85% 이상이 지속되면 쿼리·인덱스·스케일 조정을 검토합니다.",
+  },
+  "dashboard.top_list.memory": {
+    definition:
+      "등록된 DB 인스턴스 중 현재 메모리 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
+    formula:
+      "각 인스턴스 최신 수집값의 메모리 사용률(%)을 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+    interpretation:
+      "목록 상단일수록 메모리 압박 가능성이 큽니다. PLE 하락·대기 증가와 함께 나타나는지 확인합니다.",
+  },
+  "dashboard.top_list.disk_latency": {
+    definition:
+      "등록된 DB 인스턴스 중 디스크 읽기 지연이 가장 큰 순서대로 상위 5개를 표시합니다.",
+    formula:
+      "각 인스턴스의 disk_read_latency_ms(읽기 I/O 1회 평균 대기)를 비교해 내림차순 정렬합니다.",
+    interpretation:
+      "목록 상단일수록 스토리지 읽기 병목 가능성이 큽니다. 20ms 이상 주의, 50ms 이상 지속 시 점검이 필요합니다.",
+  },
+  "dashboard.top_list.log": {
+    definition:
+      "등록된 DB 인스턴스 중 트랜잭션 로그 사용률이 가장 높은 순서대로 상위 5개를 표시합니다.",
+    formula:
+      "각 인스턴스 최신 수집값의 log_used_percent(%)를 비교해 내림차순 정렬한 뒤 상위 5개를 선택합니다.",
+    interpretation:
+      "목록 상단일수록 로그 파일 압박이 큽니다. 장기 트랜잭션, 백업 정책, 로그 증가 설정을 확인합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.mdfUsage]: {
+    definition:
+      "DB 인스턴스별 데이터 파일(MDF) 실사용 용량(GB)을 세로 막대 차트로 비교합니다.",
+    formula:
+      "수집된 metric_history·용량 스냅샷에서 MDF 사용 MB를 GB로 환산해 표시합니다. X축은 인스턴스명 순입니다.",
+    interpretation:
+      "막대가 클수록 데이터 파일 점유가 큽니다. 급증 시 테이블 증가·인덱스·증설 계획을 함께 확인합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.ldfUsage]: {
+    definition:
+      "DB 인스턴스별 트랜잭션 로그(LDF) 실사용 용량(GB)을 세로 막대 차트로 비교합니다.",
+    formula:
+      "수집된 로그 파일 사용 MB를 GB로 환산해 표시합니다. X축은 인스턴스명 순입니다.",
+    interpretation:
+      "막대가 크면 로그 파일 압박이 큽니다. 대량 DML·장기 트랜잭션·백업 정책을 점검합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.cpuMemory]: {
+    definition:
+      "인스턴스별 현재 CPU·메모리 사용률(%)을 나란히 비교하는 차트입니다.",
+    formula:
+      "최신 resource_summary의 cpu_used_percent, memory_used_percent 값을 인스턴스명 순으로 표시합니다.",
+    interpretation:
+      "CPU·메모리가 동시에 높으면 메모리 압박과 쿼리 부하를 함께 의심합니다. 85% 이상 지속 시 튜닝·스케일을 검토합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.diskIo]: {
+    definition:
+      "인스턴스별 디스크 읽기·쓰기 평균 지연(ms)을 비교하는 차트입니다.",
+    formula:
+      "disk_read_latency_ms, disk_write_latency_ms(읽기·쓰기 I/O 1회 평균 대기)를 인스턴스명 순으로 표시합니다.",
+    interpretation:
+      "읽기 지연 20ms 이상·50ms 이상 지속 시 스토리지 병목을, 쓰기 지연 상승 시 로그·체크포인트 부하를 확인합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.qpsTps]: {
+    definition:
+      "인스턴스별 초당 배치 요청(QPS)과 트랜잭션(TPS) 처리량을 비교하는 차트입니다.",
+    formula:
+      "batch_requests_per_sec(QPS), transactions_per_sec(TPS)를 샘플 간격으로 환산한 최신값을 표시합니다.",
+    interpretation:
+      "QPS는 요청량, TPS는 트랜잭션·쓰기 부하 지표입니다. 급증 시 CPU·IO·세션 지표와 함께 원인을 추적합니다.",
+  },
+  [BI_CHART_TOOLTIP_KEYS.sessionsByInstance]: {
+    definition:
+      "DB 인스턴스별 전체 세션 수 대비 활성·비활성 세션을 누적 세로 막대로 비교합니다.",
+    formula:
+      "session_total_count, session_active_count에서 활성·(전체-활성) 세션을 인스턴스명 순으로 표시합니다.",
+    interpretation:
+      "활성(밝은색) 비중이 크면 현재 처리·대기 중인 세션이 많습니다. 접속 폭주·장기 실행 SQL 여부를 확인합니다.",
   },
 };
 

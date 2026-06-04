@@ -1,7 +1,6 @@
 /** 인스턴스별 Collector 실행 엔진입니다. */
 
 import { listDbInstances, updateCollectStatus } from "@/lib/inventory/store";
-import { createCollectorAdapter } from "@/services/collector/registry";
 import type { CollectorContext, CollectorRunResult } from "@/services/collector/types";
 import { detectSqlRegressions } from "@/lib/analysis/sql-regression";
 import { serializeError } from "@/lib/serialize-error";
@@ -135,7 +134,15 @@ const createFailedResult = (
   deadlocks: [],
   sql: [],
   sqlPlans: [],
-  errorMessage: error instanceof Error ? error.message : "수집 중 오류가 발생했습니다.",
+  errorMessage:
+    error instanceof Error
+      ? error.message
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ? error.message
+        : "수집 중 오류가 발생했습니다.",
 });
 
 /**
@@ -221,10 +228,15 @@ export const startCollectorScheduler = () => {
   }
 
   if (runtime.intervalId) {
-    return {
-      started: false,
-      reason: "already_started",
-    };
+    if (process.env.NODE_ENV === "development") {
+      clearInterval(runtime.intervalId);
+      runtime.intervalId = null;
+    } else {
+      return {
+        started: false,
+        reason: "already_started",
+      };
+    }
   }
 
   runtime.startedAt = now();
@@ -280,6 +292,7 @@ export const runCollectorForInstance = async (
   status.isRunning = true;
 
   try {
+    const { createCollectorAdapter } = await import("@/services/collector/registry");
     const adapter = createCollectorAdapter(toCollectorContext(instance));
     const availability = await adapter.collectAvailability();
 

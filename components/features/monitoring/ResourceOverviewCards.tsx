@@ -15,6 +15,7 @@ import {
   computeDbTotalSizeGb,
   formatDbSizeGbOneDecimal,
 } from "@/lib/monitoring/storage-capacity";
+import { cn } from "@/lib/utils";
 import type { MetricHistoryRecord } from "@/services/storage/types";
 
 type ResourceOverviewCardsProps = {
@@ -32,20 +33,26 @@ const formatValue = (value: number | null, suffix = "") => {
   return `${Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value)}${suffix}`;
 };
 
+/** 대시보드 DB 카드 내부 지표용 스타일입니다. */
+const nestedMetricCardClass =
+  "border border-border/80 bg-background shadow-sm ring-0";
+
 const ResourceCard = ({
   label,
   value,
   unit,
   percent,
   metricKey,
+  className,
 }: {
   label: string;
   value: number | null;
   unit: string;
   percent?: number | null;
   metricKey: keyof ResourceSummary;
+  className?: string;
 }) => (
-  <Card>
+  <Card className={cn(className)}>
     <CardHeader className="pb-1.5">
       <div className="flex items-center justify-between gap-2">
         <CardDescription>
@@ -68,9 +75,11 @@ const ResourceCard = ({
 const SessionStatusCard = ({
   activeCount,
   totalCount,
+  className,
 }: {
   activeCount: number | null;
   totalCount: number | null;
+  className?: string;
 }) => {
   const displayValue =
     activeCount !== null && totalCount !== null
@@ -78,7 +87,7 @@ const SessionStatusCard = ({
       : "-";
 
   return (
-    <Card>
+    <Card className={cn(nestedMetricCardClass, className)}>
       <CardHeader className="pb-1.5">
         <div className="flex items-center justify-between gap-2">
           <CardDescription>
@@ -95,8 +104,14 @@ const SessionStatusCard = ({
   );
 };
 
-const DbSizeCard = ({ dbSizeGb }: { dbSizeGb: number | null }) => (
-  <Card>
+const DbSizeCard = ({
+  dbSizeGb,
+  className,
+}: {
+  dbSizeGb: number | null;
+  className?: string;
+}) => (
+  <Card className={cn(className)}>
     <CardHeader className="pb-1.5">
       <div className="flex items-center justify-between gap-2">
         <CardDescription>
@@ -136,6 +151,7 @@ export const ResourceOverviewCards = ({
           unit="%"
           percent={resource.cpuUsedPercent}
           metricKey="cpuUsedPercent"
+          className={compact ? nestedMetricCardClass : undefined}
         />
         <ResourceCard
           label="메모리 사용률"
@@ -143,19 +159,25 @@ export const ResourceOverviewCards = ({
           unit="%"
           percent={resource.memoryUsedPercent}
           metricKey="memoryUsedPercent"
+          className={compact ? nestedMetricCardClass : undefined}
         />
         <ResourceCard
           label="디스크 읽기 지연"
           value={resource.diskReadLatencyMs}
           unit=" ms"
           metricKey="diskReadLatencyMs"
+          className={compact ? nestedMetricCardClass : undefined}
         />
         {compact ? (
           <>
-            <DbSizeCard dbSizeGb={dbSizeGb} />
+            <DbSizeCard
+              dbSizeGb={dbSizeGb}
+              className={nestedMetricCardClass}
+            />
             <SessionStatusCard
               activeCount={resource.sessionActiveCount}
               totalCount={resource.sessionTotalCount}
+              className={nestedMetricCardClass}
             />
           </>
         ) : (
