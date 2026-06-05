@@ -46,12 +46,19 @@ export const PageHeader = ({
             : "flex-1",
         )}
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <div
+          className={cn(
+            "flex items-center",
+            descriptionBesideTitle ? "min-w-0 gap-3" : "flex-wrap gap-x-4 gap-y-1",
+          )}
+        >
           <h1 className="shrink-0 font-mono text-xl font-semibold leading-8 tracking-tight">
             {title}
           </h1>
           {description && descriptionBesideTitle ? (
-            <p className="text-muted-foreground min-w-0 text-xs leading-8">{description}</p>
+            <p className="text-muted-foreground min-w-0 text-xs leading-8 whitespace-nowrap">
+              {description}
+            </p>
           ) : null}
         </div>
         {description && !descriptionBesideTitle ? (

@@ -48,6 +48,8 @@ export type DbInstance = {
   sqlAggregateIntervalSec: number;
   isActive: boolean;
   connectionSecretRef: string;
+  /** 목록 표시용 — 접속 Secret에서 조회한 DB 사용자명 */
+  connectionUsername?: string | null;
   lastCollectAt: string | null;
   lastCollectStatus: CollectStatus | null;
   lastConnectionTestAt: string | null;

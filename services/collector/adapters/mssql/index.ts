@@ -205,6 +205,26 @@ const findRateRow = (
       (instance.length === 0 || (row.instanceName ?? "") === instance),
   );
 
+/** 인스턴스에 등록된 DATABASE 세션만 조회하는 WHERE 절을 구성합니다. */
+const buildRegisteredDatabaseSessionFilter = (context: CollectorContext) => {
+  const databaseName = context.databaseName?.trim();
+
+  if (databaseName) {
+    return {
+      clause:
+        "AND DB_NAME(COALESCE(r.database_id, s.database_id)) = @databaseName",
+      apply: (request: sql.Request) => {
+        request.input("databaseName", sql.NVarChar(256), databaseName);
+      },
+    };
+  }
+
+  return {
+    clause: "AND COALESCE(r.database_id, s.database_id) = DB_ID()",
+    apply: () => undefined,
+  };
+};
+
 /**
  * MSSQL Collector 어댑터 인스턴스를 생성합니다.
  */
@@ -942,8 +962,12 @@ export const createMssqlCollectorAdapter = (
     },
     collectSessions: async (): Promise<SessionPayload[]> => {
       const collectTime = now();
+      const databaseSessionFilter = buildRegisteredDatabaseSessionFilter(context);
       const rows = await withConnection(async (connection) => {
-        const result = await connection.request().query<SessionRow>(`
+        const request = connection.request();
+        databaseSessionFilter.apply(request);
+
+        const result = await request.query<SessionRow>(`
           SELECT TOP (50)
             s.session_id AS sessionId,
             s.login_name AS loginName,
@@ -965,6 +989,7 @@ export const createMssqlCollectorAdapter = (
           OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) st
           WHERE s.is_user_process = 1
             AND s.session_id > 50
+            ${databaseSessionFilter.clause}
           ORDER BY COALESCE(r.cpu_time, 0) DESC, s.session_id;
         `);
 

@@ -174,7 +174,7 @@ const mapSessionPayloads = (sessions: SessionPayload[]): SessionItem[] =>
 
 const COLLECTION_REFERENCE_VARIANTS = new Set<
   MonitoringRealtimeClientProps["variant"]
->(["dashboard", "realtime", "sessions"]);
+>(["dashboard", "realtime", "sessions", "blocking", "deadlocks"]);
 
 /** 클립보드에 텍스트를 복사하고 짧은 완료 안내를 표시합니다. */
 const copyTextToClipboard = async (text: string, label: string) => {
@@ -362,7 +362,11 @@ export const MonitoringRealtimeClient = ({
         title={title}
         description={description}
         descriptionBesideTitle={
-          variant === "dashboard" || variant === "realtime" || variant === "sessions"
+          variant === "dashboard" ||
+          variant === "realtime" ||
+          variant === "sessions" ||
+          variant === "blocking" ||
+          variant === "deadlocks"
         }
         actions={
           <>
@@ -376,6 +380,7 @@ export const MonitoringRealtimeClient = ({
               />
             ) : null}
             <CollectRunButton
+              size="sm"
               onCollect={handleManualCollect}
               onFailed={(failedMessage) => setError(failedMessage)}
             />
@@ -535,10 +540,9 @@ const DbInstanceSelect = ({
   }
 
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <span className="shrink-0 text-xs leading-8 text-foreground/55">DB선택</span>
+    <div className="flex shrink-0 items-center">
       <Select value={selectedId} onValueChange={onSelectId}>
-        <SelectTrigger className="h-8 min-w-[10rem] w-[14rem] text-xs">
+        <SelectTrigger className="h-8 w-[7.5rem] min-w-0 px-2 text-xs">
           <SelectValue placeholder="DB 인스턴스 선택" />
         </SelectTrigger>
         <SelectContent>

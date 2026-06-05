@@ -32,7 +32,7 @@ import {
   buildVaultConnectionSecretRef,
   parseConnectionSecretRef,
 } from "@/lib/secrets/refs";
-import { deleteConnectionSecret } from "@/lib/secrets";
+import { deleteConnectionSecret, resolveConnectionSecret } from "@/lib/secrets";
 import { toConnectionTestApiError } from "@/lib/secrets/errors";
 import { maskHost, formatSecretRefForLog } from "@/lib/security/mask";
 import { createCollectorAdapter } from "@/services/collector/registry";
@@ -475,16 +475,37 @@ export const deleteBusinessSystem = async (id: string) => {
   }
 };
 
+/** DB 인스턴스 목록에 접속 사용자명을 붙입니다. */
+const enrichDbInstancesWithConnectionUsername = async (
+  instances: DbInstance[],
+): Promise<DbInstance[]> =>
+  Promise.all(
+    instances.map(async (instance) => {
+      try {
+        const { credential } = await resolveConnectionSecret(
+          instance.connectionSecretRef,
+          instance.dbmsType,
+        );
+
+        return { ...instance, connectionUsername: credential.username };
+      } catch {
+        return { ...instance, connectionUsername: null };
+      }
+    }),
+  );
+
 export const listDbInstances = async () => {
+  let instances: DbInstance[];
+
   if (shouldUseMssqlInventory()) {
-    return listDbInstancesFromMssql();
+    instances = await listDbInstancesFromMssql();
+  } else if (shouldUseSupabaseInventory()) {
+    instances = await listDbInstancesFromSupabase();
+  } else {
+    instances = getState().dbInstances.map((instance) => normalizeDbInstance(instance));
   }
 
-  if (shouldUseSupabaseInventory()) {
-    return listDbInstancesFromSupabase();
-  }
-
-  return getState().dbInstances.map((instance) => normalizeDbInstance(instance));
+  return enrichDbInstancesWithConnectionUsername(instances);
 };
 
 export const getDbInstance = async (id: string) => {

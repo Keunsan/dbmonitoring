@@ -37,20 +37,10 @@ type SqlPerformanceItem = {
   sqlTextMasked: string;
 };
 
-type SqlPlanItem = {
-  planHash: string;
-  capturedAt: string;
-  avgElapsedMs: number;
-  totalCpuMs: number;
-  executions: number;
-  planText: string;
-};
-
 type SqlDetail = {
   sqlId: string;
   latest: SqlPerformanceItem | null;
   history: SqlPerformanceItem[];
-  plans: SqlPlanItem[];
   performanceChange: {
     avgElapsedChangePercent: number | null;
     cpuChangePercent: number | null;
@@ -77,8 +67,12 @@ const requestJson = async <T,>(url: string) => {
 const formatNumber = (value: number) =>
   Intl.NumberFormat("ko-KR", { maximumFractionDigits: 1 }).format(value);
 
+/** 성능 이력 테이블 헤더 고정 스타일입니다. */
+const STICKY_TABLE_HEADER_CLASS =
+  "sticky top-0 z-10 bg-card [&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card [&_tr]:border-b [&_tr]:shadow-sm";
+
 /**
- * SQL Text, 성능 이력, 실행 계획 목록을 표시합니다.
+ * SQL Text와 성능 이력을 표시합니다.
  */
 export const SqlDetailClient = ({
   dbInstances,
@@ -164,10 +158,10 @@ export const SqlDetailClient = ({
   }, [dbInstanceId, sqlId]);
 
   return (
-    <div className="space-y-6">
+    <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <PageHeader
         title="SQL 상세 분석"
-        description="SQL Text, CPU/Elapsed/Reads 이력, 실행 횟수, 실행 계획을 확인합니다."
+        description="SQL Text, CPU/Elapsed/Reads 이력, 실행 횟수를 확인합니다."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -191,128 +185,111 @@ export const SqlDetailClient = ({
         }
       />
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <div className="portal-content-canvas flex min-h-0 flex-1 flex-col gap-6 overflow-hidden p-4 md:p-5">
+        {error ? (
+          <Alert variant="destructive" className="shrink-0">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
 
-      {loading ? (
-        <Card>
-          <CardContent className="text-muted-foreground py-10 text-center text-sm">
-            SQL 상세 데이터를 불러오는 중입니다...
-          </CardContent>
-        </Card>
-      ) : null}
-
-      {!loading && !detail ? (
-        <EmptyState
-          title="SQL 상세 데이터가 없습니다"
-          description="수집이 완료된 뒤 다시 확인하거나 다른 DB 인스턴스를 선택해 주세요."
-        />
-      ) : null}
-
-      {!loading && detail ? (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{detail.sqlId}</CardTitle>
-              <CardDescription>
-                평균 수행 시간 변화:{" "}
-                {detail.performanceChange.avgElapsedChangePercent === null
-                  ? "-"
-                  : `${formatNumber(detail.performanceChange.avgElapsedChangePercent)}%`}
-                {" / "}
-                CPU 변화:{" "}
-                {detail.performanceChange.cpuChangePercent === null
-                  ? "-"
-                  : `${formatNumber(detail.performanceChange.cpuChangePercent)}%`}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="font-mono text-sm whitespace-pre-wrap">
-                {detail.latest?.sqlTextMasked ?? "-"}
-              </p>
-              <div className="grid gap-3 md:grid-cols-4">
-                <MetricBox label="실행 횟수" value={formatNumber(detail.latest?.executions ?? 0)} />
-                <MetricBox
-                  label="평균 수행 시간"
-                  value={`${formatNumber(detail.latest?.avgElapsedMs ?? 0)}ms`}
-                />
-                <MetricBox
-                  label="총 CPU"
-                  value={`${formatNumber(detail.latest?.totalCpuMs ?? 0)}ms`}
-                />
-                <MetricBox
-                  label="마지막 실행"
-                  value={detail.latest?.lastExecutionTime ?? detail.latest?.metricTime ?? "-"}
-                />
-              </div>
+        {loading ? (
+          <Card className="shrink-0">
+            <CardContent className="text-muted-foreground py-10 text-center text-sm">
+              SQL 상세 데이터를 불러오는 중입니다...
             </CardContent>
           </Card>
+        ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>성능 이력</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>수집 시각</TableHead>
-                    <TableHead>실행 횟수</TableHead>
-                    <TableHead>평균 수행(ms)</TableHead>
-                    <TableHead>CPU(ms)</TableHead>
-                    <TableHead>Logical Reads</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...detail.history].reverse().map((item) => (
-                    <TableRow key={item.metricTime}>
-                      <TableCell>{item.metricTime}</TableCell>
-                      <TableCell>{formatNumber(item.executions)}</TableCell>
-                      <TableCell>{formatNumber(item.avgElapsedMs)}</TableCell>
-                      <TableCell>{formatNumber(item.totalCpuMs)}</TableCell>
-                      <TableCell>{formatNumber(item.totalLogicalReads ?? 0)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+        {!loading && !detail ? (
+          <EmptyState
+            title="SQL 상세 데이터가 없습니다"
+            description="수집이 완료된 뒤 다시 확인하거나 다른 DB 인스턴스를 선택해 주세요."
+          />
+        ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>실행 계획 목록</CardTitle>
-              <CardDescription>plan hash별 최근 스냅샷입니다.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {detail.plans.length === 0 ? (
-                <EmptyState title="수집된 실행 계획이 없습니다" />
-              ) : (
-                detail.plans.map((plan) => (
-                  <div key={`${plan.planHash}_${plan.capturedAt}`} className="rounded-lg border p-4">
-                    <div className="mb-2 flex flex-wrap gap-4 text-sm">
-                      <span>plan hash: {plan.planHash}</span>
-                      <span>수집: {plan.capturedAt}</span>
-                      <span>평균 수행: {formatNumber(plan.avgElapsedMs)}ms</span>
-                      <span>CPU: {formatNumber(plan.totalCpuMs)}ms</span>
-                    </div>
-                    <pre className="max-h-48 overflow-auto font-mono text-xs">{plan.planText}</pre>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </>
-      ) : null}
-    </div>
+        {!loading && detail ? (
+          <>
+            <Card className="shrink-0">
+              <CardHeader>
+                <CardTitle>{detail.sqlId}</CardTitle>
+                <CardDescription>
+                  평균 수행 시간 변화:{" "}
+                  {detail.performanceChange.avgElapsedChangePercent === null
+                    ? "-"
+                    : `${formatNumber(detail.performanceChange.avgElapsedChangePercent)}%`}
+                  {" / "}
+                  CPU 변화:{" "}
+                  {detail.performanceChange.cpuChangePercent === null
+                    ? "-"
+                    : `${formatNumber(detail.performanceChange.cpuChangePercent)}%`}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="font-mono text-sm whitespace-pre-wrap">
+                  {detail.latest?.sqlTextMasked ?? "-"}
+                </p>
+                <div className="grid gap-3 md:grid-cols-4">
+                  <MetricBox
+                    label="실행 횟수"
+                    value={formatNumber(detail.latest?.executions ?? 0)}
+                  />
+                  <MetricBox
+                    label="평균 수행 시간"
+                    value={`${formatNumber(detail.latest?.avgElapsedMs ?? 0)}ms`}
+                  />
+                  <MetricBox
+                    label="총 CPU"
+                    value={`${formatNumber(detail.latest?.totalCpuMs ?? 0)}ms`}
+                  />
+                  <MetricBox
+                    label="마지막 실행"
+                    value={detail.latest?.lastExecutionTime ?? detail.latest?.metricTime ?? "-"}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <CardHeader className="shrink-0">
+                <CardTitle>성능 이력</CardTitle>
+              </CardHeader>
+              <CardContent className="min-h-0 flex-1 overflow-hidden pb-3">
+                <div className="h-full min-h-0 overflow-auto rounded-md border">
+                  <table className="w-full caption-bottom border-collapse text-sm">
+                    <TableHeader className={STICKY_TABLE_HEADER_CLASS}>
+                      <TableRow>
+                        <TableHead>수집 시각</TableHead>
+                        <TableHead>실행 횟수</TableHead>
+                        <TableHead>평균 수행(ms)</TableHead>
+                        <TableHead>CPU(ms)</TableHead>
+                        <TableHead>Logical Reads</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {[...detail.history].reverse().map((item) => (
+                        <TableRow key={item.metricTime}>
+                          <TableCell>{item.metricTime}</TableCell>
+                          <TableCell>{formatNumber(item.executions)}</TableCell>
+                          <TableCell>{formatNumber(item.avgElapsedMs)}</TableCell>
+                          <TableCell>{formatNumber(item.totalCpuMs)}</TableCell>
+                          <TableCell>{formatNumber(item.totalLogicalReads ?? 0)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : null}
+      </div>
+    </main>
   );
 };
 
 const MetricBox = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-lg border p-3">
     <div className="text-muted-foreground text-xs">{label}</div>
-    <div className="text-lg font-semibold">{value}</div>
+    <div className="text-base font-semibold tabular-nums">{value}</div>
   </div>
 );

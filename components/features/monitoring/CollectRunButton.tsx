@@ -11,12 +11,19 @@ import { Button } from "@/components/ui/button";
 type CollectRunButtonProps = {
   onCollect: () => Promise<void>;
   onFailed?: (message: string) => void;
+  label?: string;
+  size?: "default" | "sm";
 };
 
 /**
- * 실시간 수집 실행 버튼입니다. 수집 중에는 비활성화되고 완료 시 토스트로 안내합니다.
+ * Manual 수집 실행 버튼입니다. 수집 중에는 비활성화되고 완료 시 토스트로 안내합니다.
  */
-export const CollectRunButton = ({ onCollect, onFailed }: CollectRunButtonProps) => {
+export const CollectRunButton = ({
+  onCollect,
+  onFailed,
+  label = "Manual",
+  size = "default",
+}: CollectRunButtonProps) => {
   const [running, setRunning] = useState(false);
   const collectingRef = useRef(false);
 
@@ -47,17 +54,19 @@ export const CollectRunButton = ({ onCollect, onFailed }: CollectRunButtonProps)
   return (
     <Button
       type="button"
+      size={size}
+      className={size === "sm" ? "px-2.5" : undefined}
       onClick={() => void handleClick()}
       disabled={running}
       aria-busy={running}
     >
       {running ? (
-        <span className="inline-flex items-center gap-2">
-          수집 중
-          <Cog className="size-4 shrink-0 animate-spin" aria-hidden />
+        <span className="inline-flex items-center gap-1.5">
+          {label}
+          <Cog className="size-3.5 shrink-0 animate-spin" aria-hidden />
         </span>
       ) : (
-        "실시간 수집 실행"
+        label
       )}
     </Button>
   );

@@ -33,6 +33,12 @@ const loadEnvLocal = () => {
         value = value.slice(1, -1);
       }
 
+      const inlineCommentIndex = value.search(/\s+#/);
+
+      if (inlineCommentIndex >= 0) {
+        value = value.slice(0, inlineCommentIndex).trim();
+      }
+
       if (process.env[key] === undefined) {
         process.env[key] = value;
       }
@@ -101,7 +107,7 @@ const runMigration = async () => {
     options: {
       encrypt: parseBooleanEnv(process.env.MSSQL_ENCRYPT, true),
       trustServerCertificate,
-      ...(ca ? { ca } : {}),
+      ...(ca ? { cryptoCredentialsDetails: { ca } } : {}),
     },
   }).connect();
 
@@ -133,6 +139,16 @@ const runMigration = async () => {
 };
 
 runMigration().catch((error) => {
-  console.error("[MSSQL_MIGRATION] 실패:", error instanceof Error ? error.message : error);
+  const message = error instanceof Error ? error.message : String(error);
+
+  console.error("[MSSQL_MIGRATION] 실패:", message);
+
+  if (message.includes("self-signed certificate")) {
+    console.error(
+      "[MSSQL_MIGRATION] TLS 안내: 서버 인증서가 사내 CA(certs/corp-ca.pem)로 검증되지 않습니다. " +
+        "자체 서명 인증서를 사용하는 SQL Server라면 .env.local에서 MSSQL_TRUST_SERVER_CERTIFICATE=true 로 설정해주세요.",
+    );
+  }
+
   process.exit(1);
 });

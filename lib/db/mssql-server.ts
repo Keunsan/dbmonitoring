@@ -62,7 +62,7 @@ export const buildMssqlOperationalPoolConfig = (): sql.config => {
     options: {
       encrypt: parseBooleanEnv(getOptionalEnv("MSSQL_ENCRYPT"), true),
       trustServerCertificate,
-      ...(ca ? { ca } : {}),
+      ...(ca ? { cryptoCredentialsDetails: { ca } } : {}),
     },
     pool: {
       max: 10,

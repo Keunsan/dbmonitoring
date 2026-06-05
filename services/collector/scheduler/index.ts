@@ -379,6 +379,32 @@ export const runCollectorForInstance = async (
   } catch (error) {
     const result = createFailedResult(instance.id, startedAt, error);
 
+    // #region agent log
+    fetch("http://127.0.0.1:7718/ingest/0b6cee79-769d-4ee1-a9e0-bafe5550e42a", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "469e27",
+      },
+      body: JSON.stringify({
+        sessionId: "469e27",
+        runId: "collect-fail",
+        hypothesisId: "B",
+        location: "scheduler/index.ts:collect-catch",
+        message: "collector run failed",
+        data: {
+          dbInstanceId: instance.id,
+          instanceName: instance.instanceName,
+          dbmsType: instance.dbmsType,
+          host: instance.host,
+          databaseName: instance.databaseName,
+          errorMessage: result.errorMessage,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+    // #endregion
+
     await saveCollectorRun(result);
     await updateCollectStatus(instance.id, "FAIL");
     status.lastStatus = "FAIL";

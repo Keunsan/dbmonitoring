@@ -593,6 +593,7 @@ export const DashboardBiClient = ({ variant = "v1" }: DashboardBiClientProps) =>
         descriptionBesideTitle
         actions={
           <CollectRunButton
+            size="sm"
             onCollect={handleManualCollect}
             onFailed={(failedMessage) => setError(failedMessage)}
           />
