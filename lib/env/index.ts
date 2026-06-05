@@ -4,6 +4,7 @@ export type RuntimeEnvironment = "development" | "test" | "staging" | "productio
 
 export type SecretProvider =
   | "supabase_vault"
+  | "db_encrypted"
   | "kms"
   | "internal_secret_manager"
   | "env_local";
@@ -81,6 +82,7 @@ export const getSecretProvider = (): SecretProvider => {
 
   if (
     value === "supabase_vault" ||
+    value === "db_encrypted" ||
     value === "kms" ||
     value === "internal_secret_manager" ||
     value === "env_local"

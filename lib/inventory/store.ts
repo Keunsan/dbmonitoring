@@ -1,6 +1,7 @@
 /** Phase 3 DB 인스턴스 관리용 개발 메모리 저장소입니다. */
 
 import { ApiRouteError, badRequest, notFound } from "@/lib/api";
+import { isMssqlServerConfigured } from "@/lib/db/mssql-server";
 import { isSupabaseServerConfigured } from "@/lib/db/supabase-server";
 import {
   purgeDbInstanceOperationalDataFromMemory,
@@ -13,6 +14,21 @@ import {
   toDbInstanceUpdateError,
 } from "@/lib/inventory/purge-db-instance-data";
 import {
+  createBusinessSystemInMssql,
+  createDbInstanceInMssql,
+  deleteBusinessSystemFromMssql,
+  deleteDbInstanceFromMssql,
+  getDbInstanceFromMssql,
+  listBusinessSystemsFromMssql,
+  listDbInstancesFromMssql,
+  updateBusinessSystemInMssql,
+  updateCollectStatusInMssql,
+  updateCollectionSettingsInMssql,
+  updateConnectionTestStatusInMssql,
+  updateDbInstanceInMssql,
+  updateDbInstanceSecretRefInMssql,
+} from "@/lib/inventory/mssql-store";
+import {
   buildVaultConnectionSecretRef,
   parseConnectionSecretRef,
 } from "@/lib/secrets/refs";
@@ -22,6 +38,7 @@ import { maskHost, formatSecretRefForLog } from "@/lib/security/mask";
 import { createCollectorAdapter } from "@/services/collector/registry";
 
 import type { CollectorContext } from "@/services/collector/types";
+import { purgeDbInstanceOperationalDataFromMssql } from "@/services/storage/mssql-store";
 import {
   createBusinessSystemInSupabase,
   createDbInstanceInSupabase,
@@ -92,7 +109,9 @@ type GlobalInventoryState = typeof globalThis & {
 
 const now = () => new Date().toISOString();
 
-const shouldUseSupabaseInventory = () => isSupabaseServerConfigured();
+const shouldUseMssqlInventory = () => isMssqlServerConfigured();
+const shouldUseSupabaseInventory = () =>
+  !shouldUseMssqlInventory() && isSupabaseServerConfigured();
 
 const normalizeDbInstance = (instance: DbInstance): DbInstance => ({
   ...instance,
@@ -340,6 +359,10 @@ export const parseCollectionSettingsInput = (
 };
 
 export const listBusinessSystems = async () => {
+  if (shouldUseMssqlInventory()) {
+    return listBusinessSystemsFromMssql();
+  }
+
   if (shouldUseSupabaseInventory()) {
     return listBusinessSystemsFromSupabase();
   }
@@ -349,6 +372,10 @@ export const listBusinessSystems = async () => {
 
 export const createBusinessSystem = async (input: BusinessSystemInput) => {
   try {
+    if (shouldUseMssqlInventory()) {
+      return await createBusinessSystemInMssql(input);
+    }
+
     if (shouldUseSupabaseInventory()) {
       return await createBusinessSystemInSupabase(input);
     }
@@ -383,6 +410,10 @@ export const updateBusinessSystem = async (
   input: BusinessSystemInput,
 ) => {
   try {
+    if (shouldUseMssqlInventory()) {
+      return await updateBusinessSystemInMssql(id, input);
+    }
+
     if (shouldUseSupabaseInventory()) {
       return await updateBusinessSystemInSupabase(id, input);
     }
@@ -412,6 +443,11 @@ export const updateBusinessSystem = async (
 
 export const deleteBusinessSystem = async (id: string) => {
   try {
+    if (shouldUseMssqlInventory()) {
+      await deleteBusinessSystemFromMssql(id);
+      return;
+    }
+
     if (shouldUseSupabaseInventory()) {
       await deleteBusinessSystemFromSupabase(id);
       return;
@@ -440,6 +476,10 @@ export const deleteBusinessSystem = async (id: string) => {
 };
 
 export const listDbInstances = async () => {
+  if (shouldUseMssqlInventory()) {
+    return listDbInstancesFromMssql();
+  }
+
   if (shouldUseSupabaseInventory()) {
     return listDbInstancesFromSupabase();
   }
@@ -448,6 +488,10 @@ export const listDbInstances = async () => {
 };
 
 export const getDbInstance = async (id: string) => {
+  if (shouldUseMssqlInventory()) {
+    return getDbInstanceFromMssql(id);
+  }
+
   if (shouldUseSupabaseInventory()) {
     return getDbInstanceFromSupabase(id);
   }
@@ -463,6 +507,10 @@ export const getDbInstance = async (id: string) => {
 
 export const createDbInstance = async (input: DbInstanceInput) => {
   try {
+    if (shouldUseMssqlInventory()) {
+      return await createDbInstanceInMssql(input);
+    }
+
     if (shouldUseSupabaseInventory()) {
       return await createDbInstanceInSupabase(input);
     }
@@ -502,6 +550,10 @@ export const createDbInstance = async (input: DbInstanceInput) => {
  * DB 인스턴스의 connection_secret_ref만 갱신합니다.
  */
 export const updateDbInstanceSecretRef = async (id: string, connectionSecretRef: string) => {
+  if (shouldUseMssqlInventory()) {
+    return updateDbInstanceSecretRefInMssql(id, connectionSecretRef);
+  }
+
   if (shouldUseSupabaseInventory()) {
     return updateDbInstanceSecretRefInSupabase(id, connectionSecretRef);
   }
@@ -514,6 +566,10 @@ export const updateDbInstanceSecretRef = async (id: string, connectionSecretRef:
 
 export const updateDbInstance = async (id: string, input: DbInstanceInput) => {
   try {
+    if (shouldUseMssqlInventory()) {
+      return await updateDbInstanceInMssql(id, input);
+    }
+
     if (shouldUseSupabaseInventory()) {
       return await updateDbInstanceInSupabase(id, input);
     }
@@ -557,6 +613,13 @@ export const deleteDbInstance = async (id: string) => {
   const instance = await getDbInstance(id);
 
   try {
+    if (shouldUseMssqlInventory()) {
+      await purgeDbInstanceOperationalDataFromMssql(id);
+      await removeDbInstanceConnectionSecretBestEffort(instance);
+      await deleteDbInstanceFromMssql(id);
+      return;
+    }
+
     if (shouldUseSupabaseInventory()) {
       await purgeDbInstanceOperationalDataFromSupabase(id);
       await removeDbInstanceConnectionSecretBestEffort(instance);
@@ -583,6 +646,10 @@ export const updateCollectionSettings = async (
   id: string,
   input: CollectionSettingsInput,
 ) => {
+  if (shouldUseMssqlInventory()) {
+    return updateCollectionSettingsInMssql(id, input);
+  }
+
   if (shouldUseSupabaseInventory()) {
     return updateCollectionSettingsInSupabase(id, input);
   }
@@ -605,6 +672,10 @@ export const updateCollectionSettings = async (
 };
 
 export const updateCollectStatus = async (id: string, status: CollectStatus) => {
+  if (shouldUseMssqlInventory()) {
+    return updateCollectStatusInMssql(id, status);
+  }
+
   if (shouldUseSupabaseInventory()) {
     return updateCollectStatusInSupabase(id, status);
   }
@@ -622,6 +693,10 @@ export const updateCollectStatus = async (id: string, status: CollectStatus) => 
 };
 
 const updateConnectionTestStatus = async (id: string, status: CollectStatus) => {
+  if (shouldUseMssqlInventory()) {
+    return updateConnectionTestStatusInMssql(id, status);
+  }
+
   if (shouldUseSupabaseInventory()) {
     return updateConnectionTestStatusInSupabase(id, status);
   }

@@ -6,7 +6,8 @@
     "dev": "cross-env NODE_EXTRA_CA_CERTS=./certs/corp-ca.pem next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "npx tsx scripts/run-mssql-migration.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
