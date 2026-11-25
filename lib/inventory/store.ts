@@ -161,7 +161,7 @@ const createInitialState = (): InventoryState => {
         envType: "DEV",
         collectorType: "AGENTLESS",
         collectorId: "local-dev-collector",
-        collectIntervalSec: 30,
+        collectIntervalSec: 60,
         sqlAggregateIntervalSec: 300,
         isActive: true,
         connectionSecretRef: "env:ERP_TEST_DB",
@@ -284,7 +284,7 @@ export const parseBusinessSystemInput = (
 export const parseDbInstanceInput = (
   payload: Record<string, unknown>,
 ): DbInstanceInput => {
-  const collectIntervalSec = parseNumber(payload, "collectIntervalSec", 30);
+  const collectIntervalSec = parseNumber(payload, "collectIntervalSec", 60);
   const sqlAggregateIntervalSec = parseNumber(
     payload,
     "sqlAggregateIntervalSec",
@@ -341,7 +341,7 @@ export const parseDbInstanceInput = (
 export const parseCollectionSettingsInput = (
   payload: Record<string, unknown>,
 ): CollectionSettingsInput => {
-  const collectIntervalSec = parseNumber(payload, "collectIntervalSec", 30);
+  const collectIntervalSec = parseNumber(payload, "collectIntervalSec", 60);
   const sqlAggregateIntervalSec = parseNumber(
     payload,
     "sqlAggregateIntervalSec",

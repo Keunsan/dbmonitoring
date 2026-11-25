@@ -1,6 +1,8 @@
 # 통합 DB 모니터링 시스템
 
-MSSQL·Oracle·Azure SQL 등 이기종 DB 환경의 통합 모니터링, 성능 분석, 알림을 위한 Next.js 16 기반 웹 애플리케이션입니다.
+여러 업무 시스템 DB를 **상시 관제**하는 통합 데이터베이스 관제 플랫폼입니다. ([docs/SYSTEM_PURPOSE.md](./docs/SYSTEM_PURPOSE.md))
+
+**AS-IS(운영 UI)**: Next.js 16 · **TO-BE(이관 중)**: `frontend/` + `backend/` ([docs/REFACTORING_PLAN.md](./docs/REFACTORING_PLAN.md))
 
 ## 기술 스택
 
@@ -21,17 +23,20 @@ MSSQL·Oracle·Azure SQL 등 이기종 DB 환경의 통합 모니터링, 성능 
 | [docs/T-012_db-instance-management.md](./docs/T-012_db-instance-management.md) | DB 인스턴스 관리 (T-012) |
 | [docs/T-013_collection-settings.md](./docs/T-013_collection-settings.md) | 수집 설정 (T-013) |
 | [docs/session-handoff.md](./docs/session-handoff.md) | PC 간 작업 인수인계 |
+| [docs/SYSTEM_PURPOSE.md](./docs/SYSTEM_PURPOSE.md) | 개발 목적·관제 정책 |
+| [docs/REFACTORING_PLAN.md](./docs/REFACTORING_PLAN.md) | 전면 재구축 계획 |
+| [docs/openapi.yaml](./docs/openapi.yaml) | TO-BE API 계약 초안 |
 
 ## 폴더 구조 요약
 
 ```text
-app/           # 페이지·API Route Handlers
-components/    # ui, layout, shared, features
-lib/           # api, auth, db, rbac, security, validation, audit
-types/         # 도메인·API 공유 타입
+app/           # AS-IS 페이지·API (Next.js)
+frontend/      # TO-BE UI (Vite + React)
+backend/       # TO-BE API (Python FastAPI)
+components/    # AS-IS UI
+lib/           # 공통 라이브러리 (AS-IS)
 services/      # collector, processing, alert
-scripts/       # worker·마이그레이션
-docs/          # 설계 문서
+docs/          # 설계·리팩토링 문서
 ```
 
 상세 규칙은 [docs/T-005_folder-structure.md](./docs/T-005_folder-structure.md)를 참고하세요.
@@ -48,6 +53,24 @@ npm run dev
 - Health API: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 - 포털 대시보드(플레이스홀더): [http://localhost:3000/dashboard](http://localhost:3000/dashboard)
 - DB 인스턴스 관리: [http://localhost:3000/admin/db-instances](http://localhost:3000/admin/db-instances)
+
+### TO-BE (병행 개발)
+
+```bash
+# 터미널 1 — AS-IS (수집·포털)
+npm run dev
+
+# 터미널 2 — Python API (backend/README.md)
+cd backend && pip install -r requirements.txt
+# NEXT_LEGACY_BASE_URL=http://127.0.0.1:3000 권장
+uvicorn app.main:app --reload --port 8000
+
+# 터미널 3 — TO-BE UI 골격
+cd frontend && npm run dev
+```
+
+- TO-BE 헬스: http://localhost:8000/api/v1/health  
+- TO-BE UI: http://localhost:5173
 
 ## 환경 설정
 

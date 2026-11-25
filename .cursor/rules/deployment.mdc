@@ -1,0 +1,11 @@
+---
+description: 배포·CI (VM 전 보류)
+globs: .gitlab-ci.yml,docker-compose.yml,backend/Dockerfile*,frontend/Dockerfile*,gitops/**
+---
+
+# 배포 (보류)
+
+- **현재**: K8s/Harbor/Fleet/`gitops/` **생성·적용 금지** (사용자 VM 대기).
+- `docker-compose.yml`, `Dockerfile.dev` = **로컬만**.
+- VM 이후: `docs/DEPLOYMENT_PROMPT.md` 우선, 프로젝트 키 `dbmonitoring`, APP_PORT `8000`.
+- CI 필요 시 lint/test only — `build→update-gitops` 없음.

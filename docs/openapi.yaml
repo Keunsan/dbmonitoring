@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: dbmonitoring API
+  version: 0.1.0
+  description: |
+    AS-IS(Next `/api/*`) → TO-BE(Python `/api/v1/*`) 계약 초안.
+    전환기: `NEXT_LEGACY_BASE_URL` 설정 시 미이관 경로는 Next로 프록시.
+servers:
+  - url: http://localhost:8000
+    description: TO-BE Python (로컬)
+  - url: http://localhost:3000
+    description: AS-IS Next (레거시)
+paths:
+  /api/v1/health:
+    get:
+      tags: [infra]
+      summary: 헬스체크 (Python 네이티브)
+      responses:
+        "200":
+          description: OK
+  /api/v1/business-systems:
+    get:
+      tags: [admin]
+      summary: 업무 시스템 목록
+    post:
+      tags: [admin]
+      summary: 업무 시스템 등록
+  /api/v1/business-systems/{id}:
+    get:
+      tags: [admin]
+    patch:
+      tags: [admin]
+    delete:
+      tags: [admin]
+  /api/v1/db-instances:
+    get:
+      tags: [admin]
+    post:
+      tags: [admin]
+  /api/v1/db-instances/{id}:
+    get:
+      tags: [admin]
+    patch:
+      tags: [admin]
+    delete:
+      tags: [admin]
+  /api/v1/db-instances/test-connection:
+    post:
+      tags: [admin]
+  /api/v1/db-instances/{id}/test-connection:
+    post:
+      tags: [admin]
+  /api/v1/db-instances/{id}/collection-settings:
+    get:
+      tags: [admin]
+    patch:
+      tags: [admin]
+  /api/v1/db-instances/{id}/connection-secret:
+    get:
+      tags: [admin]
+    put:
+      tags: [admin]
+  /api/v1/collector/run:
+    post:
+      tags: [collector]
+  /api/v1/collector/status:
+    get:
+      tags: [collector]
+  /api/v1/monitoring/summary:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/metrics:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/sessions:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/sql:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/runs:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/blocking:
+    get:
+      tags: [monitoring]
+  /api/v1/monitoring/deadlocks:
+    get:
+      tags: [monitoring]
+  /api/v1/threshold-policies:
+    get:
+      tags: [alerts]
+    post:
+      tags: [alerts]
+  /api/v1/threshold-policies/test:
+    post:
+      tags: [alerts]
+  /api/v1/threshold-policies/{id}:
+    get:
+      tags: [alerts]
+    patch:
+      tags: [alerts]
+    delete:
+      tags: [alerts]
+  /api/v1/analysis/sql/{sqlId}:
+    get:
+      tags: [analysis]
+  /api/v1/analysis/plan-changes:
+    get:
+      tags: [analysis]
+  /api/v1/analysis/regressions:
+    get:
+      tags: [analysis]
+  /api/v1/analysis/regressions/detect:
+    post:
+      tags: [analysis]
+  /api/v1/alerts:
+    get:
+      tags: [alerts]
+  /api/v1/alerts/evaluate:
+    post:
+      tags: [alerts]
+  /api/v1/alerts/{id}/ack:
+    post:
+      tags: [alerts]
+components:
+  schemas:
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ApiResponse:
+      type: object
+      properties:
+        data: {}
+        error:
+          $ref: "#/components/schemas/ApiError"
+        meta:
+          type: object

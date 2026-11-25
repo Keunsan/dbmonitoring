@@ -22,6 +22,7 @@ import { ResourceOverviewCards } from "@/components/features/monitoring/Resource
 import { ResourceTopLists } from "@/components/features/monitoring/ResourceTopLists";
 import { ResourceTrendChart } from "@/components/features/monitoring/ResourceTrendChart";
 import { ThroughputSessionCards } from "@/components/features/monitoring/ThroughputSessionCards";
+import { MONITORING_UI_REFRESH_MS } from "@/lib/constants/monitoring";
 import { PageHeader } from "@/components/layout";
 import { EmptyState } from "@/components/shared";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -328,7 +329,7 @@ export const MonitoringRealtimeClient = ({
 
     const refreshIntervalId = window.setInterval(() => {
       void loadSummary();
-    }, 10_000);
+    }, MONITORING_UI_REFRESH_MS);
 
     return () => {
       cancelled = true;

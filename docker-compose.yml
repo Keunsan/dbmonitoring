@@ -1,0 +1,24 @@
+# 로컬 개발 전용 — 운영 CD·K8s 배포에 사용하지 않음 (REFACTORING_PLAN §1.7)
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      APP_PORT: "8000"
+      NEXT_LEGACY_BASE_URL: "http://host.docker.internal:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.dev
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_PROXY_TARGET: "http://backend:8000"
+    depends_on:
+      - backend

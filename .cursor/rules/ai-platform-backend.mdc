@@ -1,0 +1,13 @@
+---
+description: Python backend 레이어·플랫폼 컴포넌트
+globs: backend/**/*
+---
+
+# backend 규칙
+
+- `backend/app/`: FastAPI 핸들러·도메인 서비스(Collector 이관 목표).
+- `backend/src/`: config, errors, api schemas, observability, security(스텁). LLM/Vector/Prompt/Cache **스킵**.
+- 설정은 `ConfigLoader`/`get_config()`만. `os.getenv`를 비즈니스 로직에 직접 쓰지 않음.
+- API 응답: `{ data, error, meta }` — `src/api/schemas.py`.
+- 예외: `FrameworkError` 파생. 사용자 메시지 **한글**.
+- AS-IS 이관 전: `legacy_proxy`로 Next `/api/*` 프록시 허용.

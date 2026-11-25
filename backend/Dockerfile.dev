@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1.6
+# 로컬 docker-compose 전용 (Harbor 배포 전)
+FROM python:3.11-slim
+WORKDIR /app/backend
+COPY backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/ .
+ENV PYTHONPATH=/app/backend
+ENV APP_PORT=8000
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

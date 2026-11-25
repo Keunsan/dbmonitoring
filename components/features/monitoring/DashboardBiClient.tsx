@@ -8,6 +8,7 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { CollectRunButton } from "@/components/features/monitoring/CollectRunButton";
 import { CollectionReferenceBar } from "@/components/features/monitoring/CollectionReferenceBar";
+import { MONITORING_UI_REFRESH_MS } from "@/lib/constants/monitoring";
 import { PageHeader } from "@/components/layout";
 import { MetricInfoTooltip } from "@/components/features/monitoring/MetricInfoTooltip";
 import { EmptyState } from "@/components/shared";
@@ -468,7 +469,7 @@ export const DashboardBiClient = ({ variant = "v1" }: DashboardBiClientProps) =>
     };
 
     void load();
-    const intervalId = window.setInterval(() => void load(), 10_000);
+    const intervalId = window.setInterval(() => void load(), MONITORING_UI_REFRESH_MS);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);

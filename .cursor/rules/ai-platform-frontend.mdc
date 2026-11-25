@@ -1,0 +1,11 @@
+---
+description: Vite React frontend (TO-BE)
+globs: frontend/**/*
+---
+
+# frontend 규칙
+
+- Vite, React, TypeScript strict, Tailwind. 비밀·service role **금지** (`VITE_*` 공개값만).
+- 로컬: `vite.config.ts` `server.proxy` → backend `8000`.
+- UI: 로딩·빈·오류 한글. 실시간 polling 기본 **60_000ms** (SYSTEM_PURPOSE §5.1).
+- R4까지 포털 전체는 Next `app/(portal)` — `frontend/`는 골격·신규 화면부터.

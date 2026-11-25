@@ -1,0 +1,14 @@
+app:
+  name: dbmonitoring
+  version: "0.1.0"
+components:
+  llm_gateway: false
+  vector_db: false
+  prompt_repository: false
+  cache_layer: false
+  api: true
+  security: true
+  observability: true
+monitoring:
+  collect_interval_sec: 60
+  ui_refresh_sec: 60

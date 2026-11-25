@@ -20,6 +20,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { MONITORING_UI_REFRESH_MS } from "@/lib/constants/monitoring";
 import { SERVER_METRIC_KEYS } from "@/lib/monitoring/metric-keys";
 import type { ApiResponse } from "@/types/api";
 
@@ -168,7 +169,7 @@ export const ResourceTrendChart = ({
     setSeriesMap({});
     setError(null);
     void load();
-    const intervalId = window.setInterval(() => void load(), 10_000);
+    const intervalId = window.setInterval(() => void load(), MONITORING_UI_REFRESH_MS);
 
     return () => {
       cancelled = true;

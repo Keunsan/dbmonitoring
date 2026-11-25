@@ -1,0 +1,13 @@
+---
+description: dbmonitoring 모노레포 개요·목적·전환 단계
+alwaysApply: true
+---
+
+# dbmonitoring 프로젝트 개요
+
+- **목적**: 통합 DB **상시 관제** — [docs/SYSTEM_PURPOSE.md](../../docs/SYSTEM_PURPOSE.md) 권위. 화면 인지 우선, 외부 알림은 DEC-07 보류. 수집·UI 갱신 **60초** (DEC-08).
+- **AS-IS**: 루트 `app/`, `components/`, Next.js 16 — **운영 UI는 당분간 여기 유지**.
+- **TO-BE**: `frontend/` (Vite+React+TS), `backend/` (Python FastAPI), `gitops/` **VM 이후**만.
+- **전환**: P0 완료 → R0~R5 Strangler. 전환기 `NEXT_LEGACY_BASE_URL=http://localhost:3000`으로 Python이 Next API 프록시 가능.
+- **배포**: Harbor/Fleet **보류**. Git 커밋만. 상세는 `docs/REFACTORING_PLAN.md`.
+- **APP_PORT**: `8000` (backend). 문서 상충 시 `docs/DEPLOYMENT_PROMPT.md`는 VM 이후 적용.
