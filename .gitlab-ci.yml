@@ -1,0 +1,15 @@
+# lint·test only — build→gitops 금지 (REFACTORING R6)
+stages:
+  - test
+
+backend:test:
+  stage: test
+  image: python:3.11-slim
+  script:
+    - cd backend && pip install -r requirements.txt && pytest -q
+
+frontend:lint:
+  stage: test
+  image: node:22-alpine
+  script:
+    - cd frontend && npm ci && npm run lint

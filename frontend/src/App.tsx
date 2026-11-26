@@ -1,87 +1,207 @@
-/** TO-BE 포털 골격 — R4 이전 연결·헬스 확인용 플레이스홀더입니다. */
-import { useCallback, useEffect, useState } from "react";
+/** Vite 포털 라우터 진입점입니다. */
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
-type HealthPayload = {
-  status?: string;
-  service?: string;
-  runtime?: string;
-};
+import { PortalLayout } from "./pages/PortalLayout";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
+import { PortalSidebarProvider } from "@/components/layout/PortalSidebarProvider";
+import { Toaster } from "@/components/ui/sonner";
 
-type ApiEnvelope<T> = {
-  data: T | null;
-  error: { code: string; message: string } | null;
-};
+import { MonitoringRealtimeClient } from "@/components/features/monitoring/MonitoringRealtimeClient";
+import { DashboardBiClient } from "@/components/features/monitoring/DashboardBiClient";
+import { SqlDetailPage } from "./pages/SqlDetailPage";
+import { PlanChangeClient } from "@/components/features/analysis/PlanChangeClient";
+import { RegressionInsightClient } from "@/components/features/analysis/RegressionInsightClient";
+import { DbInstanceManagementClient } from "@/components/features/admin/DbInstanceManagementClient";
+import { ThresholdPolicyManagementClient } from "@/components/features/admin/ThresholdPolicyManagementClient";
 
-export const App = () => {
-  const [health, setHealth] = useState<ApiEnvelope<HealthPayload> | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchInterval: 60_000,
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 
-  const loadHealth = useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const res = await fetch("/api/v1/health");
-      const json = (await res.json()) as ApiEnvelope<HealthPayload>;
-      if (!res.ok || json.error) {
-        setLoadError(json.error?.message ?? "헬스 API 응답을 처리하지 못했습니다.");
-        setHealth(json);
-        return;
-      }
-      setHealth(json);
-    } catch {
-      setLoadError("백엔드에 연결하지 못했습니다. backend(8000) 실행 여부를 확인해 주세요.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadHealth();
-    const id = window.setInterval(() => void loadHealth(), 60_000);
-    return () => window.clearInterval(id);
-  }, [loadHealth]);
-
-  return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-6 p-8">
-      <header>
-        <p className="text-sm text-slate-400">dbmonitoring TO-BE (frontend/)</p>
-        <h1 className="text-2xl font-semibold">통합 DB 관제 포털</h1>
-        <p className="mt-2 text-slate-300">
-          운영 UI는 Phase R4에서 이관합니다. 현재는 Next.js( AS-IS )와 병행 개발 중입니다.
-        </p>
-      </header>
-
-      <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6">
-        <h2 className="text-lg font-medium">백엔드 연결 상태</h2>
-        {loading && <p className="mt-4 text-slate-400">확인 중…</p>}
-        {!loading && loadError && (
-          <p className="mt-4 text-red-300" role="alert">
-            {loadError}
-          </p>
-        )}
-        {!loading && !loadError && health?.data && (
-          <dl className="mt-4 grid gap-2 text-sm">
-            <div className="flex gap-2">
-              <dt className="text-slate-400">status</dt>
-              <dd>{health.data.status}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-slate-400">service</dt>
-              <dd>{health.data.service}</dd>
-            </div>
-            <div className="flex gap-2">
-              <dt className="text-slate-400">runtime</dt>
-              <dd>{health.data.runtime}</dd>
-            </div>
-          </dl>
-        )}
-        <p className="mt-6 text-xs text-slate-500">
-          AS-IS 앱: <a className="underline" href="http://localhost:3000">localhost:3000</a>
-        </p>
-      </section>
-    </main>
-  );
-};
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <PortalSidebarProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="/dashboard"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="통합 현황"
+                    description="전체 DB 수집 상태와 주요 지표를 60초마다 갱신합니다."
+                    variant="dashboard"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/dashboard/v1"
+              element={
+                <PortalLayout>
+                  <DashboardBiClient variant="v1" />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/dashboard/v2"
+              element={
+                <PortalLayout>
+                  <DashboardBiClient variant="v2" />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/monitoring/realtime"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="DB 실시간 현황"
+                    description="60초마다 최신 스냅샷을 조회합니다."
+                    variant="realtime"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/monitoring/sessions"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="실시간 세션"
+                    description="세션 스냅샷을 60초마다 조회합니다."
+                    variant="sessions"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/monitoring/blocking"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="락 및 Blocking"
+                    description="Blocking 스냅샷을 60초마다 조회합니다."
+                    variant="blocking"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/monitoring/deadlocks"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="교착상태"
+                    description="Deadlock 이벤트를 60초마다 조회합니다."
+                    variant="deadlocks"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/monitoring/waits"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="Wait 현황"
+                    description="Wait 지표를 60초마다 조회합니다."
+                    variant="waits"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/analysis/top-sql"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="Top SQL 분석"
+                    description="SQL 성능 집계를 60초마다 조회합니다."
+                    variant="top-sql"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/analysis/sql/:sqlId"
+              element={
+                <PortalLayout>
+                  <SqlDetailPage />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/analysis/plan-changes"
+              element={
+                <PortalLayout>
+                  <PlanChangeClient />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/analysis/regressions"
+              element={
+                <PortalLayout>
+                  <RegressionInsightClient />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/alerts/live"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="실시간 알림"
+                    description="임계치 평가로 생성된 알림을 확인합니다."
+                    variant="alerts"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/alerts/history"
+              element={
+                <PortalLayout>
+                  <MonitoringRealtimeClient
+                    title="알림 이력"
+                    description="처리된 알림 이력을 조회합니다."
+                    variant="alerts"
+                  />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/admin/db-instances"
+              element={
+                <PortalLayout>
+                  <DbInstanceManagementClient />
+                </PortalLayout>
+              }
+            />
+            <Route
+              path="/admin/threshold-policies"
+              element={
+                <PortalLayout>
+                  <ThresholdPolicyManagementClient />
+                </PortalLayout>
+              }
+            />
+          </Routes>
+        </BrowserRouter>
+        <Toaster richColors position="top-right" />
+      </PortalSidebarProvider>
+    </ThemeProvider>
+  </QueryClientProvider>
+);
 
 export default App;

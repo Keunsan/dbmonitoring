@@ -1,4 +1,4 @@
-/** 운영 포털 메뉴·라우트 상수 (화면 §2 메뉴 구조 기준)입니다. */
+/** 운영 포털 메뉴·라우트 상수 — TO-BE 원본: frontend/src/constants/routes.ts */
 
 export type PortalNavItem = {
   label: string;

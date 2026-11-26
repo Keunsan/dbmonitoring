@@ -14,11 +14,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class AppSettings(BaseSettings):
     """런타임 환경 변수 (민감 정보는 .env만)."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(".env", "../.env.local"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     app_env: str = Field(default="development", alias="APP_ENV")
     app_port: int = Field(default=8000, alias="APP_PORT")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    next_public_supabase_url: str = Field(default="", alias="NEXT_PUBLIC_SUPABASE_URL")
+    supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
+    mssql_host: str = Field(default="", alias="MSSQL_HOST")
+    mssql_port: int = Field(default=1433, alias="MSSQL_PORT")
+    mssql_database: str = Field(default="", alias="MSSQL_DATABASE")
+    mssql_user: str = Field(default="", alias="MSSQL_USER")
+    mssql_password: str = Field(default="", alias="MSSQL_PASSWORD")
+    mssql_encrypt: bool = Field(default=True, alias="MSSQL_ENCRYPT")
+    mssql_trust_server_certificate: bool = Field(
+        default=False,
+        alias="MSSQL_TRUST_SERVER_CERTIFICATE",
+    )
+    next_legacy_base_url: str = Field(default="", alias="NEXT_LEGACY_BASE_URL")
+    mssql_ca_cert_path: str = Field(default="", alias="MSSQL_CA_CERT_PATH")
 
 
 def _backend_root() -> Path:

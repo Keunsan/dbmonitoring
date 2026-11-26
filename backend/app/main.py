@@ -12,8 +12,17 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.handlers import health  # noqa: E402
+from app.handlers import (  # noqa: E402
+    alerts,
+    analysis,
+    collector,
+    health,
+    inventory,
+    monitoring,
+    threshold,
+)
 from app.legacy_proxy import router as legacy_proxy_router  # noqa: E402
+from src.api.exception_handlers import register_exception_handlers  # noqa: E402
 from src.config.loader import get_config, get_settings  # noqa: E402
 from src.observability.logging import logger  # noqa: E402
 
@@ -31,7 +40,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_exception_handlers(app)
+
 app.include_router(health.router, prefix="/api/v1")
+app.include_router(inventory.router, prefix="/api/v1")
+app.include_router(monitoring.router, prefix="/api/v1")
+app.include_router(alerts.router, prefix="/api/v1")
+app.include_router(analysis.router, prefix="/api/v1")
+app.include_router(collector.router, prefix="/api/v1")
+app.include_router(threshold.router, prefix="/api/v1")
 # 미등록 경로는 마지막에 레거시 프록시 (R1 전환기)
 app.include_router(legacy_proxy_router, prefix="/api")
 

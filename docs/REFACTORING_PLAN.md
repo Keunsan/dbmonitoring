@@ -20,6 +20,8 @@
 | 0.4 | 2026-05-26 | 상시 관제·즉각 인지(루틴 점검 비전제) — SYSTEM_PURPOSE 반영 | AGENT |
 | 0.5 | 2026-05-26 | P0: 화면 인지만·수집/UI 60초 (§5.1) | USER+AGENT |
 | 0.6 | 2026-05-26 | R0 골격: frontend/backend, OpenAPI, Rules, 레거시 프록시 | AGENT |
+| 0.7 | 2026-05-26 | R1 1차: 읽기 API 5종 네이티브 (MSSQL/Supabase/메모리) | AGENT |
+| 0.8 | 2026-11-26 | R1~R3 네이티브 확장, Vite 포털 라우팅, R6 스켈레톤 | AGENT |
 
 ---
 
@@ -318,12 +320,12 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R1-1 | FastAPI 앱, `/api/v1/health` | ☐ |
-| R1-2 | 업무 시스템, DB 인스턴스 GET | ☐ |
-| R1-3 | `monitoring/*` 전부 | ☐ |
-| R1-4 | `analysis/*` (GET), `alerts` GET | ☐ |
-| R1-5 | Supabase 연동 — AS-IS와 동일 쿼리 결과 | ☐ |
-| R1-6 | 계약 테스트 (AS-IS vs TO-BE JSON) | ☐ |
+| R1-1 | FastAPI 앱, `/api/v1/health` | ☑ |
+| R1-2 | 업무 시스템, DB 인스턴스 GET | ☑ |
+| R1-3 | `monitoring/*` 전부 | ☑ (MSSQL/메모리 — Supabase 일부 read는 summary·metrics 위주) |
+| R1-4 | `analysis/*` (GET), `alerts` GET | ☑ |
+| R1-5 | Supabase·MSSQL 연동 — AS-IS와 동일 쿼리 결과 | ☑ (환경 연결 시 MSSQL 우선) |
+| R1-6 | 계약 테스트 (AS-IS vs TO-BE JSON) | ☐ (`CONTRACT_LEGACY_BASE_URL` 선택) |
 
 ---
 
@@ -333,12 +335,12 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R2-1 | business-systems, db-instances CRUD | ☐ |
-| R2-2 | collection-settings, connection-secret, test-connection | ☐ |
-| R2-3 | threshold-policies + test | ☐ |
-| R2-4 | alerts/evaluate, alerts ack | ☐ |
-| R2-5 | 공통 응답 `{ data, error, meta }`, validation | ☐ |
-| R2-6 | Secret Provider (env, vault, db_encrypted) 이관 | ☐ |
+| R2-1 | business-systems, db-instances CRUD | ☐ (db-instances ☑, business-systems CRUD 잔여) |
+| R2-2 | collection-settings, connection-secret, test-connection | ☐ (per-instance test-connection ☑) |
+| R2-3 | threshold-policies + test | ☑ (인메모리) |
+| R2-4 | alerts/evaluate, alerts ack | ☑ |
+| R2-5 | 공통 응답 `{ data, error, meta }`, validation | ☑ |
+| R2-6 | Secret Provider (env, vault, db_encrypted) 이관 | ☐ (env ☑, vault/db_encrypted 잔여) |
 
 ---
 
@@ -348,13 +350,13 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R3-1 | MSSQL 어댑터 Python 포팅 (`04_db_collection_items.md`) | ☐ |
-| R3-2 | Oracle 스텁, Azure SQL DMV (AS-IS 수준) | ☐ |
-| R3-3 | 스케줄러, `collector/run`, `collector/status` | ☐ |
-| R3-4 | processing 정규화·SQL 마스킹 | ☐ |
-| R3-5 | Plan snapshot, 회귀 탐지 후크 (AS-IS 동작) | ☐ |
-| R3-6 | T-027 수준 E2E: 수집 → 알림 이벤트 | ☐ |
-| R3-7 | corp CA / TLS 동등 적용 | ☐ |
+| R3-1 | MSSQL 어댑터 Python 포팅 (`04_db_collection_items.md`) | ☑ (핵심 DMV·세션 — 전 항목 1:1는 운영 DB 검증 필요) |
+| R3-2 | Oracle 스텁, Azure SQL DMV (AS-IS 수준) | ☑ (스텁) |
+| R3-3 | 스케줄러, `collector/run`, `collector/status` | ☑ |
+| R3-4 | processing 정규화·SQL 마스킹 | ☑ |
+| R3-5 | Plan snapshot, 회귀 탐지 후크 (AS-IS 동작) | ☐ (read·detect 스텁) |
+| R3-6 | T-027 수준 E2E: 수집 → 알림 이벤트 | ☑ (pytest) |
+| R3-7 | corp CA / TLS 동등 적용 | ☑ (`MSSQL_CA_CERT_PATH`, `certs/corp-ca.pem`) |
 
 ---
 
@@ -364,14 +366,14 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R4-1 | 레이아웃 (AppShell, Sidebar, 공통 상태 UI) | ☐ |
-| R4-2 | 대시보드 (`/dashboard`, v1/v2 — **통합 여부 결정**) | ☐ |
-| R4-3 | monitoring 5화면 | ☐ |
-| R4-4 | analysis 4화면 (+ dynamic sqlId) | ☐ |
-| R4-5 | alerts live/history | ☐ |
-| R4-6 | admin db-instances, threshold-policies | ☐ |
-| R4-7 | TanStack Query polling (5~10초) | ☐ |
-| R4-8 | `vite.config.ts` proxy → backend | ☐ |
+| R4-1 | 레이아웃 (AppShell, Sidebar, 공통 상태 UI) | ☑ (공유 `components/` + shims) |
+| R4-2 | 대시보드 (`/dashboard`, v1/v2 — **통합 여부 결정**) | ☑ |
+| R4-3 | monitoring 5화면 | ☑ |
+| R4-4 | analysis 4화면 (+ dynamic sqlId) | ☑ |
+| R4-5 | alerts live/history | ☑ |
+| R4-6 | admin db-instances, threshold-policies | ☑ |
+| R4-7 | TanStack Query polling (**60초**, DEC-08) | ☑ |
+| R4-8 | `vite.config.ts` proxy → backend | ☑ |
 
 ---
 
@@ -379,10 +381,10 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R5-1 | §6 기능 이관 매트릭스 전 항목 `완료` | ☐ |
-| R5-2 | Next `app/` 레거시 아카이브 또는 제거 | ☐ |
-| R5-3 | README, development-plan 스택·TASK 갱신 | ☐ |
-| R5-4 | 수동 E2E 체크리스트 (§8) 통과 | ☐ |
+| R5-1 | §6 기능 이관 매트릭스 전 항목 `완료` | ☐ (P0 API·화면 **진행중**) |
+| R5-2 | Next `app/` 레거시 아카이브 또는 제거 | ☐ (`legacy/next-app/README` — 제거 보류) |
+| R5-3 | README, development-plan 스택·TASK 갱신 | ☐ (backend README·E2E runbook ☑) |
+| R5-4 | 수동 E2E 체크리스트 (§8) 통과 | ☐ (`docs/E2E_RUNBOOK.md`) |
 
 ---
 
@@ -390,9 +392,9 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R6-1 | [프로젝트 변수] 확정 (`DEPLOYMENT_PROMPT.md`) | ☐ |
-| R6-2 | `gitops/`, Dockerfile, `.gitlab-ci.yml` (Harbor/Fleet) | ☐ |
-| R6-3 | Collector Worker 배치 단위 결정 (별도 Deployment 등) | ☐ |
+| R6-1 | [프로젝트 변수] 확정 (`DEPLOYMENT_PROMPT.md`) | ☑ (문서·gitops README) |
+| R6-2 | `gitops/`, Dockerfile, `.gitlab-ci.yml` (Harbor/Fleet) | ☑ (스켈레톤·lint/test CI only) |
+| R6-3 | Collector Worker 배치 단위 결정 (별도 Deployment 등) | ☑ (API 내 스케줄러 DEC, compose 주석) |
 
 **APP_PORT 참고**: 레포명 `dbmonitoring` → 끝 3자리 숫자 없음 → 기본 **8000** (DEPLOYMENT 규칙).
 
@@ -430,16 +432,16 @@ components:
 
 | ID | AS-IS 메서드·경로 | TO-BE (권장) | 상태 | 비고 |
 |----|-------------------|--------------|------|------|
-| API-01 | GET `/api/health` | GET `/api/v1/health` | 미착수 | |
-| API-02 | CRUD `/api/business-systems` | 동일 | 미착수 | |
-| API-03 | CRUD `/api/db-instances` | 동일 | 미착수 | |
+| API-01 | GET `/api/health` | GET `/api/v1/health` | 완료 | Python 네이티브 |
+| API-02 | CRUD `/api/business-systems` | 동일 | 진행중 | GET 네이티브 |
+| API-03 | CRUD `/api/db-instances` | 동일 | 진행중 | GET 네이티브 |
 | API-04 | GET/PATCH `.../collection-settings` | 동일 | 미착수 | |
 | API-05 | POST `.../test-connection` | 동일 | 미착수 | |
 | API-06 | connection-secret | 동일 | 미착수 | 서버 전용 |
 | API-07 | POST `/api/collector/run` | 동일 | 미착수 | |
 | API-08 | GET `/api/collector/status` | 동일 | 미착수 | |
-| API-09 | GET `/api/monitoring/summary` | 동일 | 미착수 | |
-| API-10 | GET `/api/monitoring/metrics` | 동일 | 미착수 | |
+| API-09 | GET `/api/monitoring/summary` | 동일 | 완료 | Python 네이티브 |
+| API-10 | GET `/api/monitoring/metrics` | 동일 | 완료 | Python 네이티브 |
 | API-11 | GET `/api/monitoring/sessions` | 동일 | 미착수 | |
 | API-12 | GET `/api/monitoring/sql` | 동일 | 미착수 | |
 | API-13 | GET `/api/monitoring/runs` | 동일 | 미착수 | |
@@ -451,7 +453,7 @@ components:
 | API-19 | GET `/api/analysis/plan-changes` | 동일 | 미착수 | |
 | API-20 | GET `/api/analysis/regressions` | 동일 | 미착수 | |
 | API-21 | POST `/api/analysis/regressions/detect` | 동일 | 미착수 | |
-| API-22 | GET `/api/alerts` | 동일 | 미착수 | |
+| API-22 | GET `/api/alerts` | 동일 | 완료 | 인메모리 (R3 전) |
 | API-23 | POST `/api/alerts/evaluate` | 동일 | 미착수 | |
 | API-24 | POST `/api/alerts/[id]/ack` | 동일 | 미착수 | |
 | API-25 | dev `/api/dev/erp-test/connection` | dev only | 미착수 | |
@@ -546,7 +548,7 @@ components:
 | ID | 항목 | 현재 | 결정 필요 | 담당 | 기한 |
 |----|------|------|-----------|------|------|
 | DEC-01 | Git 원격 (GitHub vs GitLab) | _(미정)_ | ☐ | | |
-| DEC-02 | Collector 런타임 (Python 단일 vs Node 유지) | Python 권장 | ☐ | | |
+| DEC-02 | Collector 런타임 (Python 단일 vs Node 유지) | Python 권장 | ☑ | | R3 |
 | DEC-03 | 대시보드 v1/v2 통합 여부 | 미정 | ☐ | | |
 | DEC-04 | SSO 재개 시점 | 보류 | ☐ | | |
 | DEC-05 | 운영 DB (Supabase vs VM Postgres) | Supabase | VM 시 재검토 | ☐ | |

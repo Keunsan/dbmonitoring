@@ -1,24 +1,31 @@
-# 로컬 개발 전용 — 운영 CD·K8s 배포에 사용하지 않음 (REFACTORING_PLAN §1.7)
+# 로컬 통합 smoke — VM/K8s 배포는 보류 (docs/DEPLOYMENT_PROMPT.md)
 services:
-  backend:
+  api:
     build:
-      context: .
-      dockerfile: backend/Dockerfile.dev
+      context: ./backend
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - ./backend/.env.example
     environment:
       APP_PORT: "8000"
-      NEXT_LEGACY_BASE_URL: "http://host.docker.internal:3000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      COLLECTOR_SCHEDULER_DISABLED: "false"
 
-  frontend:
+  web:
     build:
-      context: .
-      dockerfile: frontend/Dockerfile.dev
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
-      - "5173:5173"
-    environment:
-      VITE_API_PROXY_TARGET: "http://backend:8000"
+      - "5173:80"
     depends_on:
-      - backend
+      - api
+
+  # Collector: DEC — API 프로세스 내 스케줄러 기본. 별도 worker는 주석 해제 시 사용.
+  # collector-worker:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #   command: ["python", "-m", "app.worker.collector"]
+  #   env_file:
+  #     - ./backend/.env.example

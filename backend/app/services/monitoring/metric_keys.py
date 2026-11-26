@@ -1,0 +1,25 @@
+"""AS-IS lib/monitoring/metric-keys.ts와 동일한 표준 키입니다."""
+
+SERVER_METRIC_KEYS = {
+    "cpuUsedPercent": "server.cpu.used_percent",
+    "memoryUsedPercent": "server.memory.used_percent",
+    "memoryAvailableMb": "server.memory.available_mb",
+    "pageLifeExpectancy": "server.memory.page_life_expectancy",
+    "memoryGrantsPending": "server.memory.grants_pending",
+    "diskReadIops": "server.disk.read_iops",
+    "diskWriteIops": "server.disk.write_iops",
+    "diskReadLatencyMs": "server.disk.read_latency_ms",
+    "diskWriteLatencyMs": "server.disk.write_latency_ms",
+    "storageDataUsedMb": "db.storage.data_used_mb",
+    "storageDataSizeMb": "db.storage.data_size_mb",
+    "logUsedPercent": "db.log.used_percent",
+    "tempdbUsedMb": "db.tempdb.used_mb",
+    "batchRequestsPerSec": "server.throughput.batch_requests_per_sec",
+    "transactionsPerSec": "server.throughput.transactions_per_sec",
+    "userConnections": "server.session.user_connections",
+    "processesBlocked": "server.session.processes_blocked",
+    "sessionTotalCount": "server.session.total_count",
+    "sessionActiveCount": "server.session.active_count",
+    "sessionIdleCount": "server.session.idle_count",
+    "sessionRunningSqlCount": "server.session.running_sql_count",
+}
