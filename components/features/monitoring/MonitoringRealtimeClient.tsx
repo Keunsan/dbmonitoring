@@ -201,6 +201,7 @@ export const MonitoringRealtimeClient = ({
   variant,
 }: MonitoringRealtimeClientProps) => {
   const [items, setItems] = useState<SummaryItem[]>([]);
+  const [topSqlItems, setTopSqlItems] = useState<SqlItem[]>([]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -216,6 +217,26 @@ export const MonitoringRealtimeClient = ({
   }, [activeInstanceId, items]);
 
   const refresh = useCallback(async () => {
+    if (variant === "top-sql") {
+      const summaryQuery = activeInstanceId
+        ? `?dbInstanceId=${encodeURIComponent(activeInstanceId)}&includeLatestSql=false`
+        : "?includeLatestSql=false";
+      const summaryPayload = await requestJson<{ items: SummaryItem[] }>(
+        `/api/monitoring/summary${summaryQuery}`,
+      );
+      setItems(summaryPayload.items);
+
+      if (activeInstanceId) {
+        const sqlPayload = await requestJson<{ items: SqlItem[] }>(
+          `/api/monitoring/sql?dbInstanceId=${encodeURIComponent(activeInstanceId)}&limit=50`,
+        );
+        setTopSqlItems(sqlPayload.items);
+      } else {
+        setTopSqlItems([]);
+      }
+      return;
+    }
+
     if (variant === "sessions" && activeInstanceId) {
       const summaryPayload = await requestJson<{ items: SummaryItem[] }>(
         `/api/monitoring/summary?dbInstanceId=${encodeURIComponent(activeInstanceId)}`,
@@ -247,6 +268,17 @@ export const MonitoringRealtimeClient = ({
     setItems(summaryPayload.items);
     setAlerts(alertPayload.items);
   }, [activeInstanceId, variant]);
+
+  const handleAcknowledgeAlert = useCallback(
+    async (alertId: string) => {
+      await requestJson(`/api/alerts/${encodeURIComponent(alertId)}/ack`, {
+        method: "POST",
+        body: JSON.stringify({ acknowledgedBy: "operator" }),
+      });
+      await refresh();
+    },
+    [refresh],
+  );
 
   const collectAndRefresh = useCallback(async () => {
     if (variant === "sessions" && activeInstanceId) {
@@ -428,7 +460,7 @@ export const MonitoringRealtimeClient = ({
               <RealtimeResourceView item={selected} />
             ) : null}
             {variant === "alerts" ? (
-              <AlertsTable alerts={alerts} />
+              <AlertsTable alerts={alerts} onAcknowledge={handleAcknowledgeAlert} />
             ) : variant === "sessions" && selected && activeInstanceId ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <SessionsTable
@@ -442,7 +474,7 @@ export const MonitoringRealtimeClient = ({
               <DeadlockCard count={selected?.summary.deadlockCount ?? 0} />
             ) : variant === "top-sql" ? (
               <SqlTable
-                sql={selected?.summary.latestSql ?? []}
+                sql={topSqlItems}
                 dbInstanceId={selected?.instance.id}
               />
             ) : null}
@@ -1029,15 +1061,36 @@ const DeadlockCard = ({ count }: { count: number }) => (
   </Card>
 );
 
-const AlertsTable = ({ alerts }: { alerts: AlertEvent[] }) => (
+const AlertsTable = ({
+  alerts,
+  onAcknowledge,
+}: {
+  alerts: AlertEvent[];
+  onAcknowledge: (alertId: string) => Promise<void>;
+}) => (
   <DataTable title="실시간 알림" empty="생성된 알림이 없습니다.">
     {alerts.map((alert) => (
       <TableRow key={alert.id}>
+        <TableCell>{alert.dbInstanceId}</TableCell>
         <TableCell>{alert.severity}</TableCell>
         <TableCell>{alert.category}</TableCell>
-        <TableCell>{alert.title}</TableCell>
         <TableCell className="max-w-xl truncate">{alert.message}</TableCell>
-        <TableCell>{alert.status}</TableCell>
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <span>{alert.status}</span>
+            {alert.status === "NEW" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void onAcknowledge(alert.id);
+                }}
+              >
+                확인
+              </Button>
+            ) : null}
+          </div>
+        </TableCell>
       </TableRow>
     ))}
   </DataTable>

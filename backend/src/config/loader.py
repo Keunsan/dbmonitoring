@@ -38,6 +38,8 @@ class AppSettings(BaseSettings):
     )
     next_legacy_base_url: str = Field(default="", alias="NEXT_LEGACY_BASE_URL")
     mssql_ca_cert_path: str = Field(default="", alias="MSSQL_CA_CERT_PATH")
+    secret_provider: str = Field(default="env", alias="SECRET_PROVIDER")
+    secret_encryption_key: str = Field(default="", alias="SECRET_ENCRYPTION_KEY")
 
 
 def _backend_root() -> Path:

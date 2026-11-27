@@ -5,15 +5,58 @@ from __future__ import annotations
 import os
 import re
 
+from app.services.secrets.refs import parse_connection_secret_ref_kind
+from app.services.secrets.vault_store import fetch_connection_secret
 from src.config.loader import get_settings
 from src.errors.api_route import ApiRouteError
 
 _ENV_REF = re.compile(r"^env:(?P<key>[A-Z0-9_]+)$", re.IGNORECASE)
 
 
+def resolve_connection_for_instance(instance: dict) -> dict:
+    """인스턴스 메타데이터와 Secret credential을 합쳐 pymssql 연결 인자를 만듭니다."""
+    settings = get_settings()
+    ref = (instance.get("connectionSecretRef") or "").strip()
+    config = resolve_connection_config(ref) if ref else resolve_connection_config("")
+    host = (config.get("server") or instance.get("host") or "").strip()
+    database = (
+        config.get("database")
+        or instance.get("databaseName")
+        or settings.mssql_database
+    )
+    port = int(config.get("port") or instance.get("port") or 1433)
+    user = config.get("user") or ""
+    password = config.get("password") or ""
+    if not host or not user:
+        raise ApiRouteError(
+            code="SECRET_NOT_CONFIGURED",
+            message="DB 연결 정보가 불완전합니다. 호스트와 인증 정보를 확인해 주세요.",
+            status=503,
+        )
+    return {
+        "server": host,
+        "port": port,
+        "database": database or None,
+        "user": user,
+        "password": password,
+    }
+
+
 def resolve_connection_config(secret_ref: str) -> dict:
     """connectionSecretRef → pymssql 연결 인자."""
     settings = get_settings()
+    if secret_ref and secret_ref.strip().startswith("vault:"):
+        parsed = parse_connection_secret_ref_kind(secret_ref)
+        credential = fetch_connection_secret(parsed["vaultName"])
+        host = credential.get("connectString") or credential.get("host") or ""
+        return {
+            "server": host,
+            "port": int(credential.get("port") or 1433),
+            "database": credential.get("database"),
+            "user": credential.get("username") or "",
+            "password": credential.get("password") or "",
+        }
+
     match = _ENV_REF.match(secret_ref.strip()) if secret_ref else None
     if match:
         prefix = match.group("key")

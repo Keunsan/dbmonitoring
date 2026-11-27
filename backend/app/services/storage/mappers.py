@@ -14,6 +14,12 @@ def _iso(value: Any) -> Any:
     return value
 
 
+def _str_id(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
+
+
 def _parse_tags(value: Any) -> dict[str, str]:
     if value is None:
         return {}
@@ -31,8 +37,8 @@ def _parse_tags(value: Any) -> dict[str, str]:
 
 def to_business_system(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": row["id"],
-        "tenantId": row["tenant_id"],
+        "id": _str_id(row["id"]),
+        "tenantId": _str_id(row["tenant_id"]),
         "code": row["code"],
         "name": row["name"],
         "importance": row["importance"],
@@ -46,15 +52,15 @@ def to_business_system(row: dict[str, Any]) -> dict[str, Any]:
 
 def to_db_instance(row: dict[str, Any], *, connection_username: str | None = None) -> dict[str, Any]:
     return {
-        "id": row["id"],
-        "tenantId": row["tenant_id"],
+        "id": _str_id(row["id"]),
+        "tenantId": _str_id(row["tenant_id"]),
         "dbmsType": row["dbms_type"],
         "instanceName": row["instance_name"],
         "host": row["host"],
         "port": int(row["port"]),
         "serviceName": row.get("service_name"),
         "databaseName": row.get("database_name"),
-        "businessSystemId": row["business_system_id"],
+        "businessSystemId": _str_id(row["business_system_id"]),
         "importance": row["importance"],
         "envType": row["env_type"],
         "collectorType": row["collector_type"],
@@ -75,9 +81,9 @@ def to_db_instance(row: dict[str, Any], *, connection_username: str | None = Non
 
 def to_collection_run(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "id": row["id"],
-        "tenantId": row["tenant_id"],
-        "dbInstanceId": row["db_instance_id"],
+        "id": _str_id(row["id"]),
+        "tenantId": _str_id(row["tenant_id"]),
+        "dbInstanceId": _str_id(row["db_instance_id"]),
         "startedAt": _iso(row["started_at"]),
         "finishedAt": _iso(row["finished_at"]),
         "status": row["status"],

@@ -3,7 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(frontendRoot, "..");
 
 /** TO-BE 프론트 — API proxy는 /api → backend /api/v1 */
 export default defineConfig({
@@ -14,12 +15,24 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": repoRoot,
-      "next/link": path.resolve(repoRoot, "frontend/src/shims/next-link.tsx"),
-      "next/navigation": path.resolve(repoRoot, "frontend/src/shims/next-navigation.ts"),
+      react: path.resolve(frontendRoot, "node_modules/react"),
+      "react-dom": path.resolve(frontendRoot, "node_modules/react-dom"),
+      "react/jsx-runtime": path.resolve(frontendRoot, "node_modules/react/jsx-runtime"),
+      "react/jsx-dev-runtime": path.resolve(
+        frontendRoot,
+        "node_modules/react/jsx-dev-runtime",
+      ),
+      "next/link": path.resolve(frontendRoot, "src/shims/next-link.tsx"),
+      "next/navigation": path.resolve(frontendRoot, "src/shims/next-navigation.ts"),
     },
+    dedupe: ["react", "react-dom", "next-themes"],
+  },
+  optimizeDeps: {
+    dedupe: ["react", "react-dom"],
   },
   server: {
-    port: 5173,
+    port: 5174,
+    strictPort: true,
     fs: {
       allow: [repoRoot],
     },

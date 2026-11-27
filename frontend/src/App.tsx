@@ -12,8 +12,8 @@ import { DashboardBiClient } from "@/components/features/monitoring/DashboardBiC
 import { SqlDetailPage } from "./pages/SqlDetailPage";
 import { PlanChangeClient } from "@/components/features/analysis/PlanChangeClient";
 import { RegressionInsightClient } from "@/components/features/analysis/RegressionInsightClient";
-import { DbInstanceManagementClient } from "@/components/features/admin/DbInstanceManagementClient";
-import { ThresholdPolicyManagementClient } from "@/components/features/admin/ThresholdPolicyManagementClient";
+import { DbInstanceAdminPage } from "./pages/DbInstanceAdminPage";
+import { ThresholdAdminPage } from "./pages/ThresholdAdminPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -184,7 +184,7 @@ const App = () => (
               path="/admin/db-instances"
               element={
                 <PortalLayout>
-                  <DbInstanceManagementClient />
+                  <DbInstanceAdminPage />
                 </PortalLayout>
               }
             />
@@ -192,7 +192,7 @@ const App = () => (
               path="/admin/threshold-policies"
               element={
                 <PortalLayout>
-                  <ThresholdPolicyManagementClient />
+                  <ThresholdAdminPage />
                 </PortalLayout>
               }
             />

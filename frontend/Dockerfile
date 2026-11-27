@@ -1,10 +1,11 @@
 FROM node:22-alpine AS build
-WORKDIR /app
+WORKDIR /repo
+# @/* → repo 루트 alias — docker-compose `web.build.context`는 저장소 루트 사용
 COPY package.json package-lock.json ./
-RUN npm ci
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm ci
 COPY . .
-# 상위 components/ alias는 build context에 repo 루트 복사 필요 — 프로덕션은 멀티스테이지 개선 예정
-RUN npm run build
+RUN cd frontend && npm run build
 
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -19,4 +19,6 @@ def mask_sql_text(sql_text: str | None) -> str | None:
     trimmed = sql_text.strip()
     if not trimmed:
         return trimmed
-    return _LITERAL_PATTERN.sub(r"\1" + _MASK + r"\1", trimmed)
+    masked = _LITERAL_PATTERN.sub(r"\1" + _MASK + r"\1", trimmed)
+    # pymssql/MSSQL 적재 시 깨진 따옴표·NULL 바이트로 인한 오류 방지
+    return masked.replace("\x00", "")[:8000]

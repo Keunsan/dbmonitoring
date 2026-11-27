@@ -22,6 +22,10 @@
 | 0.6 | 2026-05-26 | R0 골격: frontend/backend, OpenAPI, Rules, 레거시 프록시 | AGENT |
 | 0.7 | 2026-05-26 | R1 1차: 읽기 API 5종 네이티브 (MSSQL/Supabase/메모리) | AGENT |
 | 0.8 | 2026-11-26 | R1~R3 네이티브 확장, Vite 포털 라우팅, R6 스켈레톤 | AGENT |
+| 0.9 | 2026-11-26 | P0: MSSQL collector write, R2 잔여 API, contract 12경로, MSSQL 갭 문서 | AGENT |
+| 1.0 | 2026-11-26 | P0-A: 다수 인스턴스 운영 게이트, db_encrypted Secret, purge, `.env.example` 다중 env 접두사 | AGENT |
+| 1.1 | 2026-11-27 | P0-C: 계약 12경로, session sanitize, 대시보드 DMV 메트릭, plan/regression 1차, Vite admin bootstrap·5174 | AGENT |
+| 1.2 | 2026-11-27 | summary 배치 조회(~6s/16건), Top SQL `/monitoring/sql` 분리, 디스크 IOPS DMV, Supabase 인벤토리 write facade, §6.1 Vite 진행중 반영 | AGENT |
 
 ---
 
@@ -325,7 +329,7 @@ components:
 | R1-3 | `monitoring/*` 전부 | ☑ (MSSQL/메모리 — Supabase 일부 read는 summary·metrics 위주) |
 | R1-4 | `analysis/*` (GET), `alerts` GET | ☑ |
 | R1-5 | Supabase·MSSQL 연동 — AS-IS와 동일 쿼리 결과 | ☑ (환경 연결 시 MSSQL 우선) |
-| R1-6 | 계약 테스트 (AS-IS vs TO-BE JSON) | ☐ (`CONTRACT_LEGACY_BASE_URL` 선택) |
+| R1-6 | 계약 테스트 (AS-IS vs TO-BE JSON) | ☑ (12경로, `test_contract_legacy.py`) |
 
 ---
 
@@ -335,12 +339,12 @@ components:
 
 | # | 작업 | 완료 |
 |---|------|------|
-| R2-1 | business-systems, db-instances CRUD | ☐ (db-instances ☑, business-systems CRUD 잔여) |
-| R2-2 | collection-settings, connection-secret, test-connection | ☐ (per-instance test-connection ☑) |
+| R2-1 | business-systems, db-instances CRUD | ☑ (MSSQL+memory; Supabase write 잔여) |
+| R2-2 | collection-settings, connection-secret, test-connection | ☑ (vault 스텁 `SECRET_PROVIDER=db_encrypted`) |
 | R2-3 | threshold-policies + test | ☑ (인메모리) |
 | R2-4 | alerts/evaluate, alerts ack | ☑ |
 | R2-5 | 공통 응답 `{ data, error, meta }`, validation | ☑ |
-| R2-6 | Secret Provider (env, vault, db_encrypted) 이관 | ☐ (env ☑, vault/db_encrypted 잔여) |
+| R2-6 | Secret Provider (env, vault, db_encrypted) 이관 | ☑ (env + 인메모리 db_encrypted 스텁) |
 
 ---
 
@@ -408,23 +412,23 @@ components:
 
 | ID | 메뉴 | 경로 | AS-IS | TO-BE 상태 | 비고 |
 |----|------|------|-------|------------|------|
-| SCR-01 | 통합 현황 | `/dashboard` | 완료 | 미착수 | |
-| SCR-02 | 통합 현황 v1 | `/dashboard/v1` | 완료 | 미착수 | v1/v2 통합 검토 |
-| SCR-03 | 통합 현황 v2 | `/dashboard/v2` | 완료 | 미착수 | |
+| SCR-01 | 통합 현황 | `/dashboard` | 완료 | 진행중 | Vite `:5174` |
+| SCR-02 | 통합 현황 v1 | `/dashboard/v1` | 완료 | 진행중 | Vite `DashboardBiClient` |
+| SCR-03 | 통합 현황 v2 | `/dashboard/v2` | 완료 | 진행중 | Vite `DashboardBiClient` |
 | SCR-04 | 업무 시스템별 | `/dashboard/by-business` | 미구현 | 미착수 | PRD — P2 |
-| SCR-05 | DB 실시간 | `/monitoring/realtime` | 완료 | 미착수 | |
-| SCR-06 | 실시간 세션 | `/monitoring/sessions` | 완료 | 미착수 | |
-| SCR-07 | Blocking | `/monitoring/blocking` | 요약 | 미착수 | Tree 고도화 백로그 |
-| SCR-08 | Deadlock | `/monitoring/deadlocks` | 요약 | 미착수 | |
-| SCR-09 | Wait | `/monitoring/waits` | 완료 | 미착수 | |
-| SCR-10 | Top SQL | `/analysis/top-sql` | 완료 | 미착수 | |
-| SCR-11 | SQL 상세 | `/analysis/sql/[sqlId]` | 완료 | 미착수 | |
-| SCR-12 | 실행 계획 변경 | `/analysis/plan-changes` | 완료 | 미착수 | |
-| SCR-13 | 성능 회귀 | `/analysis/regressions` | 완료 | 미착수 | |
-| SCR-14 | 실시간 알림 | `/alerts/live` | 완료 | 미착수 | |
+| SCR-05 | DB 실시간 | `/monitoring/realtime` | 완료 | 진행중 | Vite |
+| SCR-06 | 실시간 세션 | `/monitoring/sessions` | 완료 | 진행중 | Vite |
+| SCR-07 | Blocking | `/monitoring/blocking` | 요약 | 진행중 | Vite, Tree 고도화 백로그 |
+| SCR-08 | Deadlock | `/monitoring/deadlocks` | 요약 | 진행중 | Vite |
+| SCR-09 | Wait | `/monitoring/waits` | 완료 | 진행중 | Vite |
+| SCR-10 | Top SQL | `/analysis/top-sql` | 완료 | 진행중 | Vite, `/monitoring/sql` 우선 로딩 |
+| SCR-11 | SQL 상세 | `/analysis/sql/[sqlId]` | 완료 | 진행중 | Vite `SqlDetailPage` |
+| SCR-12 | 실행 계획 변경 | `/analysis/plan-changes` | 완료 | 진행중 | Vite |
+| SCR-13 | 성능 회귀 | `/analysis/regressions` | 완료 | 진행중 | Vite |
+| SCR-14 | 실시간 알림 | `/alerts/live` | 완료 | 진행중 | Vite |
 | SCR-15 | 알림 이력 | `/alerts/history` | 화면 | 미착수 | API 연동 재검증 |
-| SCR-16 | DB 인스턴스 | `/admin/db-instances` | 완료 | 미착수 | |
-| SCR-17 | 임계치 정책 | `/admin/threshold-policies` | 완료 | 미착수 | |
+| SCR-16 | DB 인스턴스 | `/admin/db-instances` | 완료 | 진행중 | Vite admin bootstrap |
+| SCR-17 | 임계치 정책 | `/admin/threshold-policies` | 완료 | 진행중 | Vite admin bootstrap |
 | SCR-18 | 사용자 관리 | `/admin/users` | 보류 | 보류 | T-037 |
 | SCR-19 | 역할·권한 | `/admin/roles` | 보류 | 보류 | T-037 |
 
@@ -433,17 +437,17 @@ components:
 | ID | AS-IS 메서드·경로 | TO-BE (권장) | 상태 | 비고 |
 |----|-------------------|--------------|------|------|
 | API-01 | GET `/api/health` | GET `/api/v1/health` | 완료 | Python 네이티브 |
-| API-02 | CRUD `/api/business-systems` | 동일 | 진행중 | GET 네이티브 |
-| API-03 | CRUD `/api/db-instances` | 동일 | 진행중 | GET 네이티브 |
-| API-04 | GET/PATCH `.../collection-settings` | 동일 | 미착수 | |
+| API-02 | CRUD `/api/business-systems` | 동일 | 진행중 | MSSQL·메모리·Supabase write |
+| API-03 | CRUD `/api/db-instances` | 동일 | 진행중 | MSSQL·메모리·Supabase write |
+| API-04 | GET/PATCH `.../collection-settings` | 동일 | 진행중 | MSSQL·Supabase |
 | API-05 | POST `.../test-connection` | 동일 | 미착수 | |
 | API-06 | connection-secret | 동일 | 미착수 | 서버 전용 |
 | API-07 | POST `/api/collector/run` | 동일 | 미착수 | |
 | API-08 | GET `/api/collector/status` | 동일 | 미착수 | |
-| API-09 | GET `/api/monitoring/summary` | 동일 | 완료 | Python 네이티브 |
+| API-09 | GET `/api/monitoring/summary` | 동일 | 완료 | 배치 조회, `includeLatestSql` |
 | API-10 | GET `/api/monitoring/metrics` | 동일 | 완료 | Python 네이티브 |
-| API-11 | GET `/api/monitoring/sessions` | 동일 | 미착수 | |
-| API-12 | GET `/api/monitoring/sql` | 동일 | 미착수 | |
+| API-11 | GET `/api/monitoring/sessions` | 동일 | 완료 | Python 네이티브 |
+| API-12 | GET `/api/monitoring/sql` | 동일 | 완료 | Top SQL 화면 우선 |
 | API-13 | GET `/api/monitoring/runs` | 동일 | 미착수 | |
 | API-14 | GET `/api/monitoring/blocking` | 동일 | 미착수 | |
 | API-15 | GET `/api/monitoring/deadlocks` | 동일 | 미착수 | |

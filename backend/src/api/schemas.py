@@ -21,7 +21,12 @@ class ApiResponse(BaseModel, Generic[T]):
 
 
 def success_response(data: T, meta: dict[str, Any] | None = None) -> dict[str, Any]:
-    return ApiResponse(data=data, error=None, meta=meta).model_dump(exclude_none=True)
+    """성공 응답 — AS-IS Next와 동일하게 error:null·meta 키를 유지합니다."""
+    return {
+        "data": data,
+        "error": None,
+        "meta": meta if meta is not None else {},
+    }
 
 
 def failure_response(code: str, message: str, meta: dict[str, Any] | None = None) -> dict[str, Any]:

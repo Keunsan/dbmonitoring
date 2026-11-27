@@ -73,6 +73,98 @@ def list_business_systems_memory() -> list[dict]:
     return list(_state()["business_systems"])
 
 
+def create_business_system_memory(payload: dict) -> dict:
+    for item in _state()["business_systems"]:
+        if item["code"] == payload["code"]:
+            from src.errors.api_route import ApiRouteError
+
+            raise ApiRouteError(
+                code="VALIDATION_ERROR",
+                message="이미 등록된 업무 코드입니다.",
+                status=400,
+            )
+    created = _now()
+    record = {
+        "id": f"bs_{len(_state()['business_systems']) + 1}",
+        "tenantId": DEFAULT_TENANT_ID,
+        "code": payload["code"],
+        "name": payload["name"],
+        "importance": payload["importance"],
+        "ownerDept": payload.get("ownerDept"),
+        "ownerName": payload.get("ownerName"),
+        "ownerEmail": payload.get("ownerEmail"),
+        "createdAt": created,
+        "updatedAt": created,
+    }
+    _state()["business_systems"].append(record)
+    return record
+
+
+def update_business_system_memory(record_id: str, payload: dict) -> dict:
+    for index, item in enumerate(_state()["business_systems"]):
+        if item["id"] == record_id:
+            updated = {
+                **item,
+                "name": payload["name"],
+                "importance": payload["importance"],
+                "ownerDept": payload.get("ownerDept"),
+                "ownerName": payload.get("ownerName"),
+                "ownerEmail": payload.get("ownerEmail"),
+                "updatedAt": _now(),
+            }
+            _state()["business_systems"][index] = updated
+            return updated
+    raise KeyError(record_id)
+
+
+def delete_business_system_memory(record_id: str) -> None:
+    linked = [i for i in _state()["db_instances"] if i.get("businessSystemId") == record_id]
+    if linked:
+        from src.errors.api_route import ApiRouteError
+
+        raise ApiRouteError(
+            code="BUSINESS_SYSTEM_IN_USE",
+            message="DB 인스턴스가 연결된 업무 시스템은 삭제할 수 없습니다.",
+            status=409,
+        )
+    before = len(_state()["business_systems"])
+    _state()["business_systems"] = [
+        item for item in _state()["business_systems"] if item["id"] != record_id
+    ]
+    if len(_state()["business_systems"]) == before:
+        raise KeyError(record_id)
+
+
+def update_db_instance_secret_ref_memory(instance_id: str, secret_ref: str) -> dict:
+    return update_db_instance_memory(instance_id, {"connectionSecretRef": secret_ref})
+
+
+def get_collection_settings_memory(instance_id: str) -> dict:
+    instance = get_db_instance_memory(instance_id)
+    if not instance:
+        raise KeyError(instance_id)
+    return {
+        "collectorId": instance.get("collectorId"),
+        "collectIntervalSec": instance.get("collectIntervalSec"),
+        "sqlAggregateIntervalSec": instance.get("sqlAggregateIntervalSec"),
+        "isActive": instance.get("isActive"),
+        "lastCollectAt": instance.get("lastCollectAt"),
+        "lastCollectStatus": instance.get("lastCollectStatus"),
+    }
+
+
+def update_collection_settings_memory(instance_id: str, settings: dict) -> dict:
+    return update_db_instance_memory(
+        instance_id,
+        {
+            "collectorId": settings.get("collectorId"),
+            "collectIntervalSec": settings["collectIntervalSec"],
+            "sqlAggregateIntervalSec": settings["sqlAggregateIntervalSec"],
+            "isActive": settings["isActive"],
+        },
+    )
+
+
 def list_db_instances_memory() -> list[dict]:
     return list(_state()["db_instances"])
 

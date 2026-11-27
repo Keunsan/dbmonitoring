@@ -117,6 +117,14 @@ def list_sql_plan_snapshots_memory(
     return list(reversed(filtered[-limit:]))
 
 
+def append_sql_regression_events_memory(events: list[dict]) -> int:
+    if not events:
+        return 0
+    state = _buckets()
+    state["sqlRegressionEvents"] = _trim([*state["sqlRegressionEvents"], *events])
+    return len(events)
+
+
 def list_sql_regression_events_memory(
     db_instance_id: str | None = None,
     limit: int = 100,

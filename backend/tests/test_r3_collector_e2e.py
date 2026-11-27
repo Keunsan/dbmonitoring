@@ -30,7 +30,7 @@ def _memory_backend(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_collector_run_evaluate_alerts() -> None:
     run = client.post("/api/v1/collector/run", json={"dbInstanceId": "db_erp_test"})
     assert run.status_code == 200
-    assert run.json()["error"] is None
+    assert run.json().get("error") is None
 
     summary = client.get("/api/v1/monitoring/summary?dbInstanceId=db_erp_test")
     assert summary.status_code == 200

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from app.services.collector.adapters import azure_sql_stub, mssql, oracle_stub
 from app.services.inventory.facade import get_db_instance, list_db_instances, update_collect_status
 from app.services.storage.facade import save_collector_run
+from src.config import storage_backend
 
 _SCHEDULER_LOCK = threading.Lock()
 _SCHEDULER_STARTED = False
@@ -69,17 +70,44 @@ def _run_instance(instance: dict, *, scope: str = "full") -> dict:
         "dbInstanceId": instance["id"],
         "dbmsType": instance.get("dbmsType"),
         "connectionSecretRef": instance.get("connectionSecretRef"),
+        "host": instance.get("host"),
+        "port": instance.get("port"),
+        "databaseName": instance.get("databaseName"),
     }
+    use_persistent_backend = (
+        storage_backend.use_mssql_backend() or storage_backend.use_supabase_backend()
+    )
     try:
         try:
             payload = adapter.collect(context, scope=scope)
         except Exception:
-            payload = mssql.collect_dev_fallback(instance["id"], scope=scope)
-        if payload.get("status") == "FAIL" and not payload.get("metrics"):
+            if not use_persistent_backend:
+                payload = mssql.collect_dev_fallback(instance["id"], scope=scope)
+            else:
+                raise
+        if (
+            not use_persistent_backend
+            and payload.get("status") == "FAIL"
+            and not payload.get("metrics")
+        ):
             payload = mssql.collect_dev_fallback(instance["id"], scope=scope)
 
         payload["dbInstanceId"] = instance["id"]
-        save_collector_run(payload, sessions_only=scope == "sessions")
+        try:
+            save_collector_run(payload, sessions_only=scope == "sessions")
+        except Exception as save_exc:
+            payload["status"] = "FAIL"
+            payload["errorMessage"] = f"수집 결과 저장에 실패했습니다: {save_exc}"
+            update_collect_status(
+                instance["id"],
+                status="FAIL",
+                error_message=payload["errorMessage"],
+            )
+            status["lastRunAt"] = payload.get("finishedAt") or _now()
+            status["lastStatus"] = "FAIL"
+            status["lastErrorMessage"] = payload["errorMessage"]
+            status["consecutiveFailures"] = status["consecutiveFailures"] + 1
+            return payload
         update_collect_status(
             instance["id"],
             status=payload.get("status") or "SUCCESS",

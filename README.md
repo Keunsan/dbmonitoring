@@ -70,7 +70,7 @@ cd frontend && npm run dev
 ```
 
 - TO-BE 헬스: http://localhost:8000/api/v1/health  
-- TO-BE UI: http://localhost:5173
+- TO-BE UI: http://localhost:5174
 
 ## 환경 설정
 

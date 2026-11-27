@@ -6,7 +6,11 @@ from fastapi import APIRouter, Query, Request
 
 from app.services.inventory.facade import list_db_instances
 from app.services.storage.empty_summary import create_empty_monitoring_summary
-from app.services.storage.facade import get_monitoring_summary, list_metric_history
+from app.services.storage.facade import (
+    get_monitoring_summaries,
+    get_monitoring_summary,
+    list_metric_history,
+)
 from src.api.dependencies import get_request_id
 from src.api.schemas import success_response
 from src.errors.api_route import ApiRouteError
@@ -25,6 +29,7 @@ def _parse_limit(value: int | None) -> int:
 def get_monitoring_summary_handler(
     request: Request,
     db_instance_id: str | None = Query(default=None, alias="dbInstanceId"),
+    include_latest_sql: bool = Query(default=True, alias="includeLatestSql"),
 ) -> dict:
     """DB 인스턴스별 최신 수집 요약을 반환합니다."""
     instances = list_db_instances()
@@ -41,9 +46,23 @@ def get_monitoring_summary_handler(
             status=404,
         )
 
+    instance_ids = [instance["id"] for instance in target_instances]
+    summaries: dict[str, dict] = {}
+    try:
+        summaries = get_monitoring_summaries(
+            instance_ids,
+            include_latest_sql=include_latest_sql,
+        )
+    except Exception as exc:
+        logger.warning("배치 요약 조회 실패, 인스턴스별 폴백", reason=str(exc))
+
     items = []
     for instance in target_instances:
         instance_id = instance["id"]
+        summary = summaries.get(instance_id)
+        if summary is not None:
+            items.append({"instance": instance, "summary": summary})
+            continue
         try:
             summary = get_monitoring_summary(instance_id)
             items.append({"instance": instance, "summary": summary})

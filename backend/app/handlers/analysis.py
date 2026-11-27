@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Query, Request
 
 from app.services.analysis.sql_detail import get_sql_detail_view
+from app.services.analysis.sql_regression import detect_sql_regressions
+from app.services.storage.facade import append_sql_regression_events
 from app.services.storage.facade import list_sql_plan_snapshots, list_sql_regression_events
 from src.api.dependencies import get_request_id
 from src.api.schemas import success_response
@@ -59,9 +61,15 @@ def get_regressions(
 
 
 @router.post("/analysis/regressions/detect")
-def detect_regressions(request: Request) -> dict:
-    """회귀 탐지 후크 (R3에서 Collector 연동, 현재는 빈 결과)."""
-    return success_response(
-        {"items": [], "detectedCount": 0},
-        meta={"requestId": get_request_id(request)},
+async def detect_regressions(request: Request) -> dict:
+    """최근 SQL 성능 이력에서 회귀 후보를 탐지하고 저장합니다."""
+    body = (
+        await request.json()
+        if request.headers.get("content-type", "").startswith("application/json")
+        else {}
     )
+    db_instance_id = (body.get("dbInstanceId") or "").strip() or None
+    result = detect_sql_regressions(db_instance_id)
+    if result["items"]:
+        append_sql_regression_events(result["items"])
+    return success_response(result, meta={"requestId": get_request_id(request)})
